@@ -64,6 +64,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-48 | Limite de tentativas: 10 códigos inexistentes por minuto por IP, depois bloqueio de 5 minutos. IP real via `CF-Connecting-IP`. | Mantenedor (aceitou proposta) |
 | DEC-49 | Troca de administrador: o servidor avisa a sala toda. Sem ninguém para assumir, a sala entra nos 5 minutos de espera (DEC-23). | Mantenedor (aceitou proposta) |
 | DEC-50 | Participante que cai fica "reconectando" por 60 s; passado esse prazo é removido e, se for o administrador, o papel passa ao participante mais antigo (DEC-22). | Mantenedor (aceitou proposta) |
+| DEC-51 | Licença do projeto: Apache-2.0 (concessão explícita de patentes, relevante para codecs; compatível com FFmpeg por ligação dinâmica sob LGPL). | Mantenedor (aceitou proposta) |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -92,7 +93,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-50.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-51.
 
 ## 5. Fora do escopo
 
