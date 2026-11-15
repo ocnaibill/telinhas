@@ -43,6 +43,14 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-27 | Navegadores com mouse ligado por padrão: lista inicial Chrome, Firefox, Edge, Safari, Brave, Arc, Opera e Vivaldi, em arquivo de configuração editável. | Mantenedor (aceitou proposta) |
 | DEC-28 | Mínimo de macOS 13 (captura de áudio por aplicativo via ScreenCaptureKit). | Mantenedor (aceitou proposta) |
 | DEC-29 | No Linux/Wayland, a seleção de tela/janela usa a UI do portal do sistema (`xdg-desktop-portal`). | Mantenedor (aceitou proposta) |
+| DEC-30 | O mockup do Stitch é só ponto de partida visual (paleta, componentes, composição). Quem define as regras é esta especificação, nunca o mockup. | Mantenedor |
+| DEC-31 | O nome é **Telinhas**. Do mockup saem: chat, nome de exemplo, estatísticas decorativas, textos e rodapé de página web, menu de navegação entre páginas e promessas ("ilimitado", "sem limites de tempo", "até 4K"). Eram exemplos ou ideias futuras. | Mantenedor |
+| DEC-32 | **Não há senha de sala.** A segurança é o código de 8 caracteres (DEC-07) mais a aprovação opcional do administrador (DEC-08, desligada por padrão). | Mantenedor |
+| DEC-33 | Layouts de visualização na sala: **Grid dinâmico** e **Foco**. O layout 50/50 do mockup fica de fora. | Mantenedor |
+| DEC-34 | Cada espectador tem volume local por transmissão, que só afeta o próprio app. | Mantenedor |
+| DEC-35 | Ao entrar numa sala, a pessoa escolhe o modo: **Assistindo** (mic e tela desligados) ou **Transmitindo** (abre a configuração de transmissão logo ao entrar). | Mantenedor |
+| DEC-36 | A configuração de transmissão é um **modal** sobre a sala (DEC-20). Resoluções e FPS oferecidos vêm do hardware e da fonte capturada (DEC-04), não de uma lista fixa. | Mantenedor |
+| DEC-37 | Tudo o que o mockup não mostra e esta especificação exige entra no design: ver `docs/design/README.md`. | Mantenedor |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -60,7 +68,14 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 - **RF-12** Mostrar lista de participantes (apelidos) e latência de cada um.
 - **RF-13** Reconectar à sala após queda, com o mesmo código.
 - **RF-14** Aviso ao usar encode por software.
-- **RF-15** Definir e trocar o apelido.
+- **RF-15** Definir e trocar o apelido (pedido no primeiro uso, DEC-14).
+- **RF-16** Alternar a visualização da sala entre Grid dinâmico e Foco (DEC-33).
+- **RF-17** Ajustar o volume local de cada transmissão (DEC-34).
+- **RF-18** Escolher "Assistindo" ou "Transmitindo" ao entrar (DEC-35).
+- **RF-19** Pop-up de pedido de entrada para o administrador, com aceitar/recusar (DEC-08, DEC-22).
+- **RF-20** Indicar quem é o administrador da sala.
+- **RF-21** Mostrar estado "reconectando" quando a conexão cai (DEC-10).
+- **RF-22** Listar resoluções e FPS conforme o hardware e a fonte capturada (DEC-36).
 
 ## 4. Pontos em aberto
 
