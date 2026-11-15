@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 use bytes::Bytes;
+use rtc::data_channel::RTCDataChannelInit;
 use rtc::interceptor::{BandwidthEstimator, EstimatorStats, Gcc, PacketReport, Registry};
 use rtc::media::Sample;
 use rtc::media::io::sample_builder::SampleBuilder;
@@ -49,8 +50,8 @@ const H264_FMTP: &str = "level-asymmetry-allowed=1;packetization-mode=1;profile-
 const H264_PAYLOAD_TYPE: PayloadType = 102;
 
 /// Frames sent but not yet acknowledged beyond which new frames are dropped
-/// (half a second at 30 fps).
-const MAX_IN_FLIGHT: usize = 15;
+/// (one second at 30 fps).
+const MAX_IN_FLIGHT: usize = 30;
 /// An unacknowledged frame is given up on after this long.
 const LOST_AFTER: Duration = Duration::from_secs(2);
 
@@ -354,7 +355,19 @@ impl SendLink {
             .await?;
         let sent_at: Arc<Mutex<HashMap<u32, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
         let round_trip = Arc::new(Stats::default());
-        let channel = built.pc.create_data_channel("acks", None).await?;
+        // Acks must not wait behind a retransmission: unordered and
+        // unreliable, so a late ack never holds back the ones after it.
+        let channel = built
+            .pc
+            .create_data_channel(
+                "acks",
+                Some(RTCDataChannelInit {
+                    ordered: false,
+                    max_retransmits: Some(0),
+                    ..Default::default()
+                }),
+            )
+            .await?;
         {
             let sent_at = Arc::clone(&sent_at);
             let round_trip = Arc::clone(&round_trip);

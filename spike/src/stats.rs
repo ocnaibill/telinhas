@@ -11,6 +11,8 @@ struct Inner {
     last_counter: Option<u32>,
     bytes: u64,
     latencies_ms: Vec<f64>,
+    /// Latencies since the last `take_window`.
+    window_ms: Vec<f64>,
 }
 
 /// Shared between the decoder thread and whoever prints the report.
@@ -48,6 +50,26 @@ impl Stats {
         inner.decoded += 1;
         inner.bytes += bytes as u64;
         inner.latencies_ms.push(latency_ms);
+        inner.window_ms.push(latency_ms);
+    }
+
+    /// Frames and latency percentiles since the previous call, so spikes
+    /// show up on the line where they happen instead of being averaged away.
+    pub fn take_window(&self) -> String {
+        let mut inner = self.inner.lock().unwrap();
+        let mut sorted = std::mem::take(&mut inner.window_ms);
+        sorted.sort_by(f64::total_cmp);
+        if sorted.is_empty() {
+            return "window: no frames".to_owned();
+        }
+        let at = |q: f64| sorted[((sorted.len() - 1) as f64 * q).round() as usize];
+        format!(
+            "window: {} frames, p50={:.0} p95={:.0} max={:.0} ms",
+            sorted.len(),
+            at(0.5),
+            at(0.95),
+            at(1.0)
+        )
     }
 
     pub fn decoded(&self) -> u64 {

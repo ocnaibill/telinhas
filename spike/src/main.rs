@@ -192,7 +192,11 @@ async fn recv(room: &RoomArgs) -> Result<()> {
     let mut tick = tokio::time::interval(Duration::from_secs(2));
     loop {
         tokio::select! {
-            _ = tick.tick() => println!("recv: {}", receiver.stats.report()),
+            _ = tick.tick() => println!(
+                "recv: {} | {}",
+                receiver.stats.report(),
+                receiver.stats.take_window()
+            ),
             _ = tokio::time::sleep_until(deadline) => break,
             _ = tokio::signal::ctrl_c() => break,
         }
@@ -225,10 +229,10 @@ async fn run_sender(
                 tokio::select! {
                     _ = tick.tick() => {
                         println!(
-                            "send: estimate {:.0} kbps, {}\n      round trip: {}",
+                            "send: estimate {:.0} kbps, {}\n      round trip {}",
                             sender.estimate_kbps(),
                             sender.counters,
-                            sender.round_trip.report()
+                            sender.round_trip.take_window()
                         );
                         if let Some(receiver) = also {
                             println!("recv: {}", receiver.stats.report());

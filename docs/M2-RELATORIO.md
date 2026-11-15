@@ -49,6 +49,30 @@ Transmissor no Windows, receptor no MacBook, sinalização em `wss://` atrás do
 
 **Ainda não sabemos** se a queda da estimativa foi congestionamento real do caminho (por exemplo, o upload do Windows ou o hotspot do Mac) ou consequência da fila. Só a segunda rodada responde.
 
+## Ensaio 2 entre redes (mesma rota, spike corrigido, `--noise 3`, 180 s)
+
+Windows (transmissor) → MacBook em 4G (receptor). Teste de velocidade do Mac no mesmo dia: fast.com 470 Mbps de descida e 55 de subida, latência 38 ms sem carga e **338 ms com carga** (fila grande no 4G); Ookla 595 Mbps, 28,7 Mbps de subida, ping 25 ms.
+
+| Medida | Resultado |
+|--------|-----------|
+| Conexão e vídeo | Estáveis por 3 minutos, cerca de 30 fps nas janelas boas |
+| Ida e volta até o quadro decodificado | p50 ≈ 96 a 109 ms o tempo todo (inclui encode e decode por software, cerca de 45 ms em loopback). p95 ≈ 120 ms nos primeiros 47 s |
+| Picos | Perto de 48 s, 53 a 60 s, 70 a 84 s, 111 a 130 s e depois de 168 s: p95 subiu a 800 ms e o máximo a 2 s |
+| Quadros | 5150 gerados, 4448 enviados, **701 descartados** pelo transmissor (13,6%), 1 pulado pelo encoder |
+| Entregues | O receptor decodificou 4351 quadros até o fim da sua janela; as perdas que ele contou (498) batem com os descartes do transmissor. A perda real de rede foi próxima de zero (menos de 1%) |
+| Controle de congestionamento | A estimativa ficou no teto de 8 Mbps o tempo todo, porque o fluxo usava só 0,3 Mbps. **O GCC não foi posto à prova** |
+| Relógios | Diferença constante de cerca de 4,16 s entre Windows e Mac. Em cima desse valor, o receptor viu a latência de ida variar +25 ms (p95) até 47 s e depois até +290 ms, com pico de cerca de +950 ms perto de 58 s |
+
+**Leitura.**
+- O problema da fila infinita do ensaio 1 sumiu: a latência ficou limitada, e o p50 ficou perto de 100 ms. Isso atende a meta de p50 (RNF-01, ≤ 300 ms), ainda com encode e decode por software.
+- Os picos de 0,3 a 1 s no vídeo são reais (o receptor também os viu) e combinam com o comportamento do 4G sob carga (latência de 338 ms no teste do fast.com). Provavelmente não é falha do `webrtc-rs`, mas a causa não está provada.
+- Os 13,6% de quadros descartados são **culpa do meu critério de descarte**: ele contava quadros sem confirmação, e as confirmações viajavam por um data channel confiável e ordenado, que trava atrás de retransmissões. Na janela de 113 a 128 s as confirmações ficaram paradas enquanto o receptor continuava decodificando. Ou seja, descartei quadros que estavam chegando.
+- Ao descartar 13,6%, esta rodada ficaria abaixo da meta de FPS (RNF-04, ≥ 95%), mas por causa do spike, não da rede.
+
+**Correção feita:** as confirmações agora usam um data channel sem ordem e sem retransmissão, o limite de quadros em trânsito subiu de 15 para 30 (1 s) e as linhas de progresso mostram percentis **da janela de 2 s**, não só acumulados, para localizar cada pico.
+
+**Falta:** repetir com `--noise 3` para confirmar a correção e rodar `--noise 4` para finalmente exercitar o GCC com banda de verdade.
+
 ## O que falta
 
 | Item | Como |
@@ -62,4 +86,4 @@ Transmissor no Windows, receptor no MacBook, sinalização em `wss://` atrás do
 
 ## Recomendação provisória
 
-Manter o `webrtc-rs` (DEC-38), **sem concluir ainda**. A conexão entre redes, o vídeo, o data channel e o controle de congestionamento funcionam. O primeiro ensaio não valida estabilidade, porque o spike tinha falhas de controle de fila que já foram corrigidas. A decisão depende da segunda rodada.
+Manter o `webrtc-rs` (DEC-38), **ainda sem concluir**. Entre redes diferentes ele conectou, entregou vídeo por 3 minutos com perda de rede próxima de zero e latência p50 de cerca de 100 ms. O que resta provar é o comportamento sob banda de verdade (o GCC ficou ocioso) e a estabilidade de 10 minutos. Os picos de latência parecem vir do 4G.
