@@ -23,6 +23,7 @@ rtc = "0.21.1"
 rtc-signal = "0.21.1"
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 serde_json = "1.0.154"
+telinhas-capture = { version = "0.0.0", path = "../capture" }
 tokio = { version = "1.54.1", features = ["full"] }
 tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
 webrtc = "0.21.1"

@@ -45,6 +45,8 @@ enum Command {
         #[arg(long, default_value_t = 3)]
         noise: u8,
     },
+    /// Lists monitors, windows and GPUs, and tests which H.264 encoders work.
+    Probe,
     /// Receives, decodes and measures.
     Recv {
         #[command(flatten)]
@@ -116,6 +118,10 @@ async fn main() -> Result<()> {
             send(&room, cfg).await
         }
         Command::Recv { room } => recv(&room).await,
+        Command::Probe => {
+            telinhas_spike::probe::run();
+            Ok(())
+        }
     }
 }
 

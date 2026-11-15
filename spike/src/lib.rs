@@ -5,6 +5,7 @@
 
 pub mod link;
 pub mod media;
+pub mod probe;
 pub mod signaling;
 pub mod source;
 pub mod stats;

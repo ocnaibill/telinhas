@@ -38,7 +38,7 @@ Fora do M3 (por já estarem em outros marcos): trocar a janela sem derrubar (M6)
 
 ### 2.3 Que GPU tem a máquina Windows
 
-**NVIDIA** (mantenedor). O encode de hardware é o NVENC, pelo `h264_nvenc` do FFmpeg, sem depender do Media Foundation. AMD e Intel ficam sem teste por enquanto. Se a máquina for um notebook com GPU integrada e dedicada, a sonda do M3a mostra qual o FFmpeg está usando.
+**NVIDIA** (mantenedor). O `nvidia-smi` visto do WSL mostra uma **GeForce RTX 2070 SUPER**, driver 621.14. O encode de hardware é o NVENC, pelo `h264_nvenc` do FFmpeg, sem depender do Media Foundation. AMD e Intel ficam sem teste por enquanto. Se a máquina for um notebook com GPU integrada e dedicada, a sonda do M3a mostra qual o FFmpeg está usando.
 
 ## 3. Passos
 
