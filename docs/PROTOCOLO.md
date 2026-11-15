@@ -1,6 +1,6 @@
 # Telinhas — Protocolo de sinalização (rascunho)
 
-> Deriva de DEC-07 a DEC-10, DEC-22 a DEC-26, DEC-32, DEC-35, DEC-42 e DEC-46 a DEC-50. Nada aqui carrega vídeo: o servidor só repassa SDP/ICE e guarda o estado das salas.
+> Deriva de DEC-07 a DEC-10, DEC-22 a DEC-26, DEC-32, DEC-35, DEC-42 e DEC-46 a DEC-54. Nada aqui carrega vídeo: o servidor só repassa SDP/ICE e guarda o estado das salas.
 
 ## 1. Transporte
 
@@ -40,7 +40,11 @@
 - **VAZIA:** ninguém conectado. O código segue válido por 5 minutos. Quem tem `session_token` da sala reconecta como o mesmo participante, inclusive o administrador anterior (DEC-42).
 - **EXPIRADA:** o estado é apagado.
 
-Estado guardado por sala: código, lista de participantes (`peer_id`, apelido, `session_token`, hora de entrada, conectado ou não), administrador, flag `require_approval`, fila de pedidos pendentes.
+Estado guardado por sala: código, lista de participantes (`peer_id`, apelido, `session_token`, ordem de entrada, conectado ou não), participantes "dormentes", administrador, flag `require_approval`, fila de pedidos pendentes e transmissões ativas.
+
+**Dormentes (implementa a DEC-42).** Quem é removido por estourar os 60 s não perde o token: fica guardado como dormente enquanto a sala existir. Se voltar com o mesmo token, retoma o `peer_id`, o apelido e a aprovação já concedida, sem novo pedido. Só retoma o papel de administrador se a sala estiver vazia no momento (se outro já assumiu, o papel não volta). Quem sai de propósito (`leave_room`) não vira dormente. Tudo isso some quando a sala expira.
+
+**Sala vazia.** Quem entra numa sala sem participantes (e sem token conhecido) vira administrador, e não precisa de aprovação, pois não há quem aprove.
 
 Participante que cai fica **reconectando** por 60 s; se não voltar, é removido (e o papel de administrador passa, se for o caso). A sala só vira VAZIA quando todos foram removidos.
 
@@ -66,7 +70,7 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 | `signal` | `to` (`peer_id`), `kind` (`offer`/`answer`/`ice`), `payload` | Repassado ao destino, sem interpretar. |
 | `stream_state` | `stream_id`, `kind` (`screen`/`webcam`), `live` (bool), `meta` (resolução, fps, codec) | Anuncia/encerra transmissão (DEC-06, DEC-12). Repassado a todos. |
 | `layer_request` | `to`, `stream_id`, `layer` (`original`/`economy`) | Espectador pede camada (DEC-04, DEC-05). Repassado ao transmissor. |
-| `latency_report` | `samples` (`[{peer_id, rtt_ms}]`) | Alimenta o monitor de latência (DEC-19). |
+| `latency_report` | `samples` (`[{peer_id, rtt_ms}]`, até 64) | Repassado aos demais participantes, que montam o monitor de latência (DEC-19). |
 
 ### 6.2 Servidor → cliente
 
@@ -75,7 +79,8 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 | `room_joined` | `code`, `you` (`peer_id`, apelido final), `peers`, `admin`, `require_approval`, `streams` | Entrada ou reconexão concluída. |
 | `approval_pending` | — | Para quem entra: aguardando o administrador. |
 | `approval_request` | `request_id`, `nickname` | Para o administrador (RF-19). |
-| `peer_joined` / `peer_left` | `peer`, `reason` (`left`/`timeout`) | Mudança na lista. |
+| `peer_joined` | `peer` (`peer_id`, `nickname`, `state`) | Alguém entrou. |
+| `peer_left` | `peer_id`, `reason` (`left`/`timeout`) | Alguém saiu. Transmissões dele são encerradas antes, com `stream_state` `live: false`. |
 | `peer_connection` | `peer_id`, `state` (`reconnecting`/`connected`) | Alimenta o estado "reconectando" (RF-21). |
 | `peer_renamed` | `peer_id`, `nickname` | Troca de apelido. |
 | `admin_changed` | `peer_id` | Troca de administrador. |
@@ -83,6 +88,7 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 | `signal` | `from`, `kind`, `payload` | Repasse. |
 | `stream_state` | `from`, … | Repasse. |
 | `layer_request` | `from`, … | Repasse. |
+| `latency_report` | `from`, `samples` | Repasse a todos, menos ao remetente. |
 | `room_over_capacity` | `count` | Informativo acima de 12; não bloqueia (DEC-24). |
 | `error` | `code`, `message` | Ver §7. |
 
@@ -91,7 +97,10 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 1. `join_room` com código válido e `require_approval = false` → `room_joined`; os outros recebem `peer_joined`.
 2. Com `require_approval = true` → `approval_pending` ao candidato, `approval_request` ao administrador.
    - Aceito → `room_joined`. Recusado ou timeout de 60 s → `error` / `join_denied` e a conexão é encerrada (DEC-47).
-   - Quem reconecta com `session_token` já conhecido **não** passa de novo pela aprovação (DEC-42).
+   - Quem reconecta com `session_token` já conhecido (conectado, reconectando ou dormente) **não** passa de novo pela aprovação (DEC-42).
+   - Se o administrador desliga a exigência (`set_approval` falso), todos os pedidos pendentes são aceitos na hora.
+   - Se o administrador muda, os pedidos pendentes são reenviados ao novo (e também ao antigo, se ele reconectar).
+   - Uma segunda conexão com o mesmo token substitui a primeira, que é encerrada.
 3. Depois de `room_joined`, cada par negocia WebRTC por `signal`. Quem tem o `peer_id` lexicograficamente menor envia a `offer`, para evitar colisão.
 
 ## 7. Erros
@@ -108,7 +117,7 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 
 ## 8. Limite de tentativas por IP (DEC-48)
 
-- Conta apenas `join_room` com código **inexistente ou expirado**.
+- Conta apenas `join_room` com código **inexistente, expirado ou malformado**. O bloqueio vale para todas as tentativas daquele IP, inclusive com o código certo.
 - 10 falhas por minuto por IP; ao estourar, bloqueio de 5 minutos para `join_room` (resposta `rate_limited`).
 - Cabeçalho `CF-Connecting-IP` só é confiável se a conexão vier do tunnel; o servidor ignora o cabeçalho em conexões diretas.
 - Limites adicionais: criação de salas por IP (a definir após medir uso) e máximo de mensagens por segundo por conexão, com desconexão em caso de abuso.
@@ -120,7 +129,11 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 - Mensagem: até 16 KiB (SDP cabe com folga).
 - Participantes: sem teto no servidor; `room_over_capacity` a partir de 13 (DEC-24).
 
-## 10. Questões ainda abertas
+## 10. Implementação
+
+Servidor em `signaling/` (DEC-54): `tokio` e `axum`, JSON com `serde`. Endpoints `GET /ws` (WebSocket) e `GET /healthz`. Porta por `TELINHAS_BIND` (padrão `127.0.0.1:8080`). Os testes de `signaling/tests/flow.rs` cobrem os fluxos deste documento, com prazos encurtados.
+
+## 11. Questões ainda abertas
 
 - Criação de salas por IP: limite numérico depende de uso real.
 - Detalhe do `meta` de `stream_state` (campos exatos de resolução/fps/codec) depende da biblioteca WebRTC escolhida (DEC-38).

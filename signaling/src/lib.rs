@@ -1,14 +1,15 @@
 //! Telinhas signaling server.
+//!
+//! Keeps the ephemeral state of rooms in memory and relays SDP/ICE between
+//! peers. No media goes through it. The wire format is described in
+//! `docs/PROTOCOLO.md`.
 
-/// Version of the signaling protocol spoken by this build (see `docs/PROTOCOLO.md`).
-pub const PROTOCOL_VERSION: u32 = 1;
+pub mod code;
+pub mod hub;
+pub mod limiter;
+pub mod protocol;
+pub mod server;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn protocol_version_starts_at_one() {
-        assert_eq!(PROTOCOL_VERSION, 1);
-    }
-}
+pub use hub::{Config, Hub};
+pub use protocol::PROTOCOL_VERSION;
+pub use server::{router, serve};
