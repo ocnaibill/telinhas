@@ -1,0 +1,8 @@
+/target
+
+# Local tooling
+.claude/
+.codex/
+
+# Windows download markers (WSL)
+*:Zone.Identifier
