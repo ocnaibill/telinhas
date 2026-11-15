@@ -43,19 +43,20 @@ Aponte o Cloudflare Tunnel para `http://localhost:8080`. As máquinas usam `wss:
 **Máquina A (transmissor):** cria a sala e imprime o código.
 
 ```bash
-./target/release/telinhas-spike send --server wss://SEU-HOST/ws --noise 4 --max-kbps 4000 --seconds 660
+./target/release/telinhas-spike send --server wss://SEU-HOST/ws --noise 3 --max-kbps 4000 --seconds 180
 ```
 
 **Máquina B (receptor):** entra com o código impresso.
 
 ```bash
-./target/release/telinhas-spike recv --server wss://SEU-HOST/ws --code XXXX-XXXX --seconds 600
+./target/release/telinhas-spike recv --server wss://SEU-HOST/ws --code XXXX-XXXX --seconds 170
 ```
 
 Pontos de atenção:
 
 - Inicie o receptor **depois** do transmissor imprimir `waiting for the receiver to join...`.
-- `--noise` vai de 0 a 5 e controla o quanto o vídeo é difícil de comprimir. Em `4` o encoder quer mais de 1,5 Mbps (na máquina de desenvolvimento, em loopback). Com `0` a `3` o fluxo fica em torno de 300 kbps e não testa a banda.
+- `--noise` vai de 0 a 5 e controla o quanto o vídeo é difícil de comprimir. **Comece com `3`** (cerca de 300 kbps, uma carga normal). Com `4` ou `5` o encoder por software não consegue segurar o bitrate e pula quadros mesmo em loopback; use só como teste de estresse, depois do teste normal.
+- Relógio de parede: no primeiro ensaio o Windows e o Mac diferiam em cerca de 4 s. Ignore a latência impressa pelo receptor e use o `round trip` do transmissor.
 - Se a conexão não chegar a `connected` em 30 s, a rede provavelmente bloqueia o UDP direto. Repita com TURN, se houver um (`coturn`):
 
 ```bash
@@ -64,13 +65,15 @@ Pontos de atenção:
 
 ## O que me enviar
 
-Copie as linhas que começam com `FINAL` dos dois lados, mais:
+Copie as linhas que começam com `FINAL` dos dois lados. A do transmissor agora tem contadores: `generated` (quadros gerados), `encoded` (emitidos pelo encoder), `written` (enviados) e `dropped_backlog` (descartados por atraso). Isso separa o que o encoder pulou do que a rede perdeu. Mande também:
 
 - o tipo de rede de cada ponta (Wi-Fi de casa, 4G, etc.) e se foi preciso TURN;
 - se a imagem travou em algum momento, e quando;
 - a curva da estimativa (as linhas `send:` a cada 2 s, ou pelo menos o início, o meio e o fim).
 
-Idealmente rode duas vezes: uma entre duas redes "boas" e outra com uma ponta em rede móvel, que é onde o controle de congestionamento aparece.
+Rodadas sugeridas: primeiro `--noise 3` por 3 minutos (teste normal); se estiver bem, `--noise 4` (estresse); e, se puder, uma com uma ponta em rede móvel, que é onde o controle de congestionamento aparece.
+
+Dica de build no Windows: se você compila a pasta do WSL (`\\wsl.localhost\...`) pelo PowerShell, o Windows e o Linux gravam em `target/` ao mesmo tempo. Para evitar que se atrapalhem, use `$env:CARGO_TARGET_DIR="C:\dev\target"` antes do `cargo build`.
 
 ## O que o ensaio ainda não cobre
 

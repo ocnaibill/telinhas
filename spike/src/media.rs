@@ -43,6 +43,35 @@ impl Default for StreamConfig {
     }
 }
 
+/// What the sending side did with its frames, so encoder skips, deliberate
+/// drops and network loss can be told apart.
+#[derive(Default)]
+pub struct SendCounters {
+    /// Frames the source produced.
+    pub generated: AtomicU64,
+    /// Frames the encoder emitted (the rest it skipped to hold its bitrate).
+    pub encoded: AtomicU64,
+    /// Frames handed to the network.
+    pub written: AtomicU64,
+    /// Frames dropped on purpose because too many were still in flight.
+    pub dropped: AtomicU64,
+}
+
+impl std::fmt::Display for SendCounters {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let get = |c: &AtomicU64| c.load(Ordering::Relaxed);
+        write!(
+            f,
+            "generated={} encoded={} (encoder skipped {}) written={} dropped_backlog={}",
+            get(&self.generated),
+            get(&self.encoded),
+            get(&self.generated).saturating_sub(get(&self.encoded)),
+            get(&self.written),
+            get(&self.dropped),
+        )
+    }
+}
+
 pub struct EncodedFrame {
     pub data: Vec<u8>,
     pub counter: u32,
@@ -72,12 +101,16 @@ pub fn spawn_encoder(
     out: UnboundedSender<EncodedFrame>,
     stop: Arc<AtomicBool>,
     target_bps: Arc<AtomicU64>,
+    need_key: Arc<AtomicBool>,
+    counters: Arc<SendCounters>,
 ) -> JoinHandle<Result<()>> {
     std::thread::spawn(move || {
         let mut source = Source::new(cfg.width, cfg.height, cfg.noise_level);
         let pick = |target: &AtomicU64| -> u32 {
-            let estimate = f64::from_bits(target.load(Ordering::Relaxed)) * 0.85;
-            (estimate as u32).clamp(300_000, cfg.max_bps)
+            // Stay under the estimate, with a low floor: a floor above the
+            // estimate piles up a queue whose delay grows without bound.
+            let estimate = f64::from_bits(target.load(Ordering::Relaxed)) * 0.8;
+            (estimate as u32).clamp(100_000, cfg.max_bps)
         };
         let mut bps = pick(&target_bps);
         let mut encoder = make_encoder(&cfg, bps)?;
@@ -89,10 +122,17 @@ pub fn spawn_encoder(
                 bps = wanted;
                 encoder = make_encoder(&cfg, bps)?;
             }
+            if need_key.swap(false, Ordering::Relaxed) {
+                encoder.force_intra_frame();
+            }
             let captured_at = Instant::now();
             let frame = source.next_frame();
+            counters.generated.fetch_add(1, Ordering::Relaxed);
             let stream = encoder.encode(&frame.yuv)?;
             let data = stream.to_vec();
+            if !data.is_empty() {
+                counters.encoded.fetch_add(1, Ordering::Relaxed);
+            }
             if !data.is_empty()
                 && out
                     .send(EncodedFrame {

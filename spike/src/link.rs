@@ -42,11 +42,17 @@ use webrtc::peer_connection::{
 use webrtc::rtp_transceiver::RtpSender;
 use webrtc::runtime::{Runtime, default_runtime};
 
-use crate::media::{StreamConfig, Unit, spawn_decoder, spawn_encoder};
+use crate::media::{SendCounters, StreamConfig, Unit, spawn_decoder, spawn_encoder};
 use crate::stats::Stats;
 
 const H264_FMTP: &str = "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f";
 const H264_PAYLOAD_TYPE: PayloadType = 102;
+
+/// Frames sent but not yet acknowledged beyond which new frames are dropped
+/// (half a second at 30 fps).
+const MAX_IN_FLIGHT: usize = 15;
+/// An unacknowledged frame is given up on after this long.
+const LOST_AFTER: Duration = Duration::from_secs(2);
 
 const BWE_INITIAL: f64 = 1_500_000.0;
 const BWE_MIN: f64 = 150_000.0;
@@ -311,6 +317,7 @@ pub struct SendLink {
     sent_at: Arc<Mutex<HashMap<u32, Instant>>>,
     /// Round trip from capture to "decoded at the other side" (see `Stats`).
     pub round_trip: Arc<Stats>,
+    pub counters: Arc<SendCounters>,
 }
 
 impl SendLink {
@@ -376,6 +383,7 @@ impl SendLink {
             estimate,
             sent_at,
             round_trip,
+            counters: Arc::new(SendCounters::default()),
         })
     }
 
@@ -422,22 +430,31 @@ impl SendLink {
 
         let (frames_tx, mut frames) = tokio::sync::mpsc::unbounded_channel();
         let duration = Duration::from_secs_f64(1.0 / f64::from(cfg.fps));
+        let need_key = Arc::new(AtomicBool::new(false));
         let encoder = spawn_encoder(
             cfg,
             frames_tx,
             Arc::clone(&stop),
             Arc::clone(&self.estimate),
+            Arc::clone(&need_key),
+            Arc::clone(&self.counters),
         );
         while let Some(frame) = frames.recv().await {
             {
                 let mut sent_at = self.sent_at.lock().unwrap();
-                sent_at.insert(frame.counter, frame.captured_at);
-                // Acks that never come back (lost frames) must not pile up.
-                if sent_at.len() > 600 {
-                    let oldest = frame.counter.wrapping_sub(600);
-                    sent_at.retain(|&c, _| c.wrapping_sub(oldest) < 1200);
+                // A frame whose ack has not come back in this long is lost.
+                sent_at.retain(|_, sent| sent.elapsed() < LOST_AFTER);
+                // Too many frames still in flight means the network cannot
+                // keep up. Sending more only adds delay, so drop this one
+                // and ask for a keyframe to resume from.
+                if sent_at.len() > MAX_IN_FLIGHT {
+                    self.counters.dropped.fetch_add(1, Ordering::Relaxed);
+                    need_key.store(true, Ordering::Relaxed);
+                    continue;
                 }
+                sent_at.insert(frame.counter, frame.captured_at);
             }
+            self.counters.written.fetch_add(1, Ordering::Relaxed);
             self.track
                 .sample_writer(ssrc, payload_type)
                 .write_sample(&Sample {

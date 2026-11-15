@@ -225,8 +225,9 @@ async fn run_sender(
                 tokio::select! {
                     _ = tick.tick() => {
                         println!(
-                            "send: estimate {:.0} kbps, round trip: {}",
+                            "send: estimate {:.0} kbps, {}\n      round trip: {}",
                             sender.estimate_kbps(),
+                            sender.counters,
                             sender.round_trip.report()
                         );
                         if let Some(receiver) = also {
@@ -243,8 +244,9 @@ async fn run_sender(
     let (streamed, ()) = tokio::join!(streaming, timer);
     streamed?;
     println!(
-        "FINAL send: estimate {:.0} kbps, round trip (sender clock only): {}",
+        "FINAL send: estimate {:.0} kbps, {}\n      round trip (sender clock only): {}",
         sender.estimate_kbps(),
+        sender.counters,
         sender.round_trip.report()
     );
     if sender.round_trip.decoded() == 0 {

@@ -28,6 +28,27 @@ Código em `spike/`. Dois peers, fonte sintética 1280×720 a 30 fps com contado
 4. **PLI (pedido de quadro-chave) não está tratado no transmissor.** O spike força um quadro-chave a cada 2 s. Falta o transmissor reagir ao PLI do espectador que entra no meio ou perde pacotes. A biblioteca expõe RTCP do lado do receptor; o lado do transmissor ainda precisa ser verificado.
 5. **API:** é preciso depender dos dois crates (`webrtc` e `rtc`). A API é assíncrona com `async_trait`, e tudo roda no Tokio, o mesmo do servidor.
 
+## Ensaio 1 entre redes (Windows → MacBook, via Cloudflare Tunnel)
+
+Transmissor no Windows, receptor no MacBook, sinalização em `wss://` atrás do Cloudflare Tunnel, sem TURN, 180 s, `--noise 4`.
+
+**O que funcionou:** a sinalização pelo túnel, a conexão (`connected` sem relay), o vídeo e o data channel entre as duas redes, e a reação do GCC (a estimativa se moveu durante o teste).
+
+**O que falhou:** o ensaio **não** atendeu o critério do M2. Dos cerca de 5400 quadros gerados, 1012 foram decodificados (cerca de 19%), e a latência de ida e volta cresceu sem parar, chegando a 48 s.
+
+| Observação | Leitura |
+|------------|---------|
+| Receptor mostrou p50 ≈ 4,4 s já no primeiro quadro; o transmissor mediu p50 ≈ 0,44 s | Os relógios do Windows e do Mac diferiam em cerca de 4 s. A latência "pelo relógio de parede" do receptor é inútil, como previsto. Vale só o ida e volta do transmissor |
+| Já nos primeiros 2 s só 16 quadros chegaram (cerca de 9 fps) | Igual ao loopback com `--noise 4`: o encoder pulava quadros porque o conteúdo pedia mais que o bitrate. Não era rede |
+| A estimativa subiu até 2,7 Mbps, caiu a 150 kbps (piso) por volta de 45 s, voltou a 8 Mbps (teto) por volta de 80 s e caiu de novo | O GCC oscilou. Pode ser rede real ou efeito da fila do próprio transmissor (hipótese abaixo) |
+| O ida e volta máximo cresceu cerca de 1 s por segundo entre 15 s e 60 s | Fila crescendo: o spike mantinha o encoder em pelo menos 300 kbps enquanto a estimativa estava em 150 a 450 kbps, e o `openh264` ainda estoura o bitrate. Sem limite de fila, o atraso não parava de crescer |
+
+**Causa provável:** falha do spike, não da biblioteca. Faltavam (1) um piso de bitrate abaixo da estimativa e (2) descartar quadros quando há atraso acumulado. Além disso, `--noise 4` já sobrecarregava o encoder na partida, e eu indiquei esse valor no guia. Foi erro meu: ele é um teste de estresse, não um teste normal.
+
+**Correção feita no spike:** o encoder segue a estimativa com piso de 100 kbps; quadros são descartados quando mais de 15 estão sem confirmação, com pedido de quadro-chave para retomar; os contadores agora separam quadros pulados pelo encoder, descartados pelo transmissor e perdidos na rede. A segunda rodada (`ENSAIO-M2.md`) começa com `--noise 3`.
+
+**Ainda não sabemos** se a queda da estimativa foi congestionamento real do caminho (por exemplo, o upload do Windows ou o hotspot do Mac) ou consequência da fila. Só a segunda rodada responde.
+
 ## O que falta
 
 | Item | Como |
@@ -41,4 +62,4 @@ Código em `spike/`. Dois peers, fonte sintética 1280×720 a 30 fps com contado
 
 ## Recomendação provisória
 
-Manter o `webrtc-rs` (DEC-38). Até aqui ele cobre o que o M2 exige (trilha H.264, data channel, congestionamento e interceptors) sem precisar trocar de biblioteca. A recomendação só vira definitiva depois do ensaio entre redes.
+Manter o `webrtc-rs` (DEC-38), **sem concluir ainda**. A conexão entre redes, o vídeo, o data channel e o controle de congestionamento funcionam. O primeiro ensaio não valida estabilidade, porque o spike tinha falhas de controle de fila que já foram corrigidas. A decisão depende da segunda rodada.
