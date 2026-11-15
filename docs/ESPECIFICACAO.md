@@ -70,6 +70,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-54 | Servidor de sinalização em `tokio` + `axum` (WebSocket, JSON com `serde`, códigos com `rand`, ids com `uuid`). TLS fica por conta do Cloudflare Tunnel (DEC-46). | Mantenedor (aceitou proposta) |
 | DEC-55 | Detalhes de sala (`docs/PROTOCOLO.md`): (a) quem é removido por timeout fica como participante dormente enquanto a sala existir, e ao voltar com o token retoma `peer_id`, apelido e aprovação, e o papel de administrador só se a sala estiver vazia; quem sai de propósito não fica dormente; (b) quem entra numa sala vazia vira administrador, sem aprovação; (c) desligar a exigência de aprovação aceita todos os pedidos pendentes. | Mantenedor (aceitou proposta) |
 | DEC-56 | Plano do M2: usar o `webrtc` 0.21.x (reescrito sobre o núcleo sem I/O `rtc`); fonte sintética codificada com `openh264` (software); receptor sem janela, que decodifica, valida e mede a latência com um contador desenhado na imagem. A janela mínima passa para o M4, com a UI (DEC-40). | Mantenedor (aceitou proposta) |
+| DEC-57 | Encerra o M2 e confirma o `webrtc` 0.21.x (sobre o núcleo `rtc`) para o MVP, com base em `docs/M2-RELATORIO.md`: entre redes diferentes, 8 min 40 s sem perda de quadros, ida e volta p50 de 87 ms e p95 de 110 ms. Os 10 minutos do critério foram dispensados pelo mantenedor. Reavaliar (alternativa mapeada: `str0m`) se PLI no transmissor, TURN, malha com várias conexões ou o encode por hardware mostrarem limites nos marcos M3 a M6. | Mantenedor (aceitou proposta) |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -98,7 +99,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-56.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-57.
 
 ## 5. Fora do escopo
 

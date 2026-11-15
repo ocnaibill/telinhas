@@ -22,7 +22,7 @@ Convenção: **RF** são os requisitos funcionais e **RNF** os não funcionais (
 
 **Saída:** testes de integração cobrindo todo o fluxo de `docs/PROTOCOLO.md` §4 a §8. Cobre RF-01, RF-02, RF-13 (parte de rede) e RF-15.
 
-## M2 — Vídeo P2P simples (decisão sobre o webrtc-rs)
+## M2 — Vídeo P2P simples (decisão sobre o webrtc-rs) — concluído (DEC-57)
 
 - Dois clientes na mesma sala trocam vídeo de uma fonte sintética (padrão de teste com contador de tempo), codificada em H.264 por software com `openh264` (DEC-56).
 - Negociação por `signal` e STUN público; TURN opcional (DEC-21).

@@ -1,6 +1,6 @@
-# Telinhas — Relatório do M2 (parcial)
+# Telinhas — Relatório do M2
 
-> Parcial: falta o ensaio entre redes (`ENSAIO-M2.md`). A decisão final sobre o `webrtc-rs` (DEC-38) é do mantenedor.
+> Concluído: o mantenedor aceitou o `webrtc-rs` 0.21.x e encerrou o M2 (DEC-57).
 
 ## Situação do `webrtc-rs`
 
