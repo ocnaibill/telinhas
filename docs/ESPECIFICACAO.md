@@ -1,0 +1,71 @@
+# Telinhas — Especificação
+
+> Status: ideação (15/11/2026). Decisões do mantenedor viram DEC-nnn e não são reabertas sem pedido dele.
+
+## 1. Visão
+
+Telinhas é um app desktop (macOS, Windows, Linux) para **transmitir tela, janela e, opcionalmente, webcam** para outras pessoas, fora de uma ferramenta de call.
+
+Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilhamento de tela da ferramenta está indisponível ou ruim. O Telinhas faz só a transmissão, em paralelo à call.
+
+**Não é:** app de call, chat, ou "tudo em um lugar".
+
+## 2. Decisões
+
+| ID | Decisão | Origem |
+|----|---------|--------|
+| DEC-01 | Implementado em Rust, com foco em velocidade e baixo uso de memória. Interface nativa em Rust (não Tauri/webview). | Mantenedor |
+| DEC-02 | Vídeo trafega P2P (WebRTC). Existe um servidor mínimo de sinalização. STUN e TURN de apoio. Detalhes em ARQUITETURA.md. | Mantenedor + recomendação |
+| DEC-03 | Escopo dimensionado para **12 pessoas simultâneas** por sala, sem limite rígido. O app informa a banda necessária ao usuário. | Mantenedor |
+| DEC-04 | Quem transmite escolhe a qualidade máxima (resolução e FPS), limitada pelo hardware. O espectador escolhe entre "original" e uma camada mais baixa. | Mantenedor |
+| DEC-05 | Camadas baixas são criadas **sob demanda**: só são codificadas se algum espectador pedir. | Mantenedor |
+| DEC-06 | **Qualquer participante pode transmitir**, inclusive várias pessoas ao mesmo tempo na mesma sala. | Mantenedor |
+| DEC-07 | Salas são efêmeras. Código de **8 caracteres**, alfabeto de 32 símbolos sem ambiguidade (≈ 2⁴⁰ combinações), mostrado como `XXXX-XXXX`. Quem tem o código entra. | Mantenedor + recomendação |
+| DEC-08 | Aprovação de entrada é **opcional**, desligada por padrão. Quem administra a sala pode exigi-la. | Mantenedor |
+| DEC-09 | A sala **não morre** quando o criador sai. Ela vive enquanto houver pessoas nela. A figura de "host" é só a de administrador, transferível (ver §4). | Mantenedor |
+| DEC-10 | Espectador que cai pode reconectar usando o mesmo código. O código identifica a sala, não o usuário. | Mantenedor |
+| DEC-11 | Dá para trocar a janela/tela compartilhada **sem derrubar** a transmissão nem a sala. | Mantenedor |
+| DEC-12 | Webcam é um vídeo separado, exibido em picture-in-picture. | Mantenedor |
+| DEC-13 | Chat de texto está fora do escopo. | Mantenedor |
+| DEC-14 | No primeiro uso a pessoa cria um apelido, que pode ser trocado a qualquer momento. Não há conta. | Mantenedor |
+| DEC-15 | Codec padrão H.264 com aceleração por hardware. Há fallback por software, com **aviso** de que a transmissão pode ficar quebrada. | Mantenedor |
+| DEC-16 | Áudio: se uma janela específica é capturada, só o áudio dela é transmitido. Se a tela inteira é capturada, o usuário pode **excluir aplicativos** do áudio do sistema (ex.: Discord, para evitar eco). O microfone é fonte opcional e fica desligado por padrão. | Mantenedor |
+| DEC-17 | Mouse: o usuário escolhe se captura. Padrão desligado ao capturar janela específica e ligado ao capturar monitor inteiro. Exceção: janelas de navegadores conhecidos têm o padrão ligado. | Mantenedor |
+| DEC-18 | Conteúdo protegido por DRM aparece como tela preta. Não há contorno. | Mantenedor |
+| DEC-19 | A interface exibe um monitor com a **latência (ms)** de cada participante naquela sala. | Mantenedor |
+| DEC-20 | Uma única tela principal, que muda de tamanho e exibe elementos como pop-ups/componentes. | Mantenedor |
+| DEC-21 | Projeto open-source. Sinalização (e TURN) hospedados no homelab do mantenedor, atrás do Cloudflare Tunnel, com as portas necessárias abertas. | Mantenedor |
+| DEC-22 | Administrador da sala: o criador no início. Ao sair, o papel passa ao participante mais antigo na sala. Só o administrador aprova entradas e liga/desliga a exigência de aprovação. | Mantenedor (aceitou proposta) |
+| DEC-23 | Sala vazia mantém o código válido por 5 minutos para reconexão; depois expira. | Mantenedor (aceitou proposta) |
+| DEC-24 | O limite de 12 é só dimensionamento: o app avisa sobre banda e desempenho a partir daí, sem bloquear entradas. | Mantenedor (aceitou proposta) |
+| DEC-25 | Código de sala expirado pode ser gerado de novo, aleatoriamente, para outra sala. | Mantenedor (aceitou proposta) |
+| DEC-26 | Apelidos repetidos na mesma sala são permitidos; o app acrescenta um sufixo (ex.: `Bianco (2)`). | Mantenedor (aceitou proposta) |
+| DEC-27 | Navegadores com mouse ligado por padrão: lista inicial Chrome, Firefox, Edge, Safari, Brave, Arc, Opera e Vivaldi, em arquivo de configuração editável. | Mantenedor (aceitou proposta) |
+| DEC-28 | Mínimo de macOS 13 (captura de áudio por aplicativo via ScreenCaptureKit). | Mantenedor (aceitou proposta) |
+| DEC-29 | No Linux/Wayland, a seleção de tela/janela usa a UI do portal do sistema (`xdg-desktop-portal`). | Mantenedor (aceitou proposta) |
+
+## 3. Requisitos funcionais (rascunho)
+
+- **RF-01** Criar sala e receber o código de 8 caracteres.
+- **RF-02** Entrar em sala existente digitando o código.
+- **RF-03** Iniciar transmissão de monitor inteiro ou de uma janela.
+- **RF-04** Iniciar/parar webcam independentemente da tela.
+- **RF-05** Escolher resolução e FPS máximos, até o limite do hardware.
+- **RF-06** Mostrar a banda de upload estimada, conforme qualidade e número de espectadores.
+- **RF-07** Espectador escolher "original" ou "econômica".
+- **RF-08** Selecionar aplicativos a excluir do áudio ao transmitir tela inteira.
+- **RF-09** Ligar/desligar captura do mouse (padrões na DEC-17).
+- **RF-10** Trocar a janela/tela transmitida sem encerrar a transmissão.
+- **RF-11** Opção da sala de exigir aprovação para entrar.
+- **RF-12** Mostrar lista de participantes (apelidos) e latência de cada um.
+- **RF-13** Reconectar à sala após queda, com o mesmo código.
+- **RF-14** Aviso ao usar encode por software.
+- **RF-15** Definir e trocar o apelido.
+
+## 4. Pontos em aberto
+
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29.
+
+## 5. Fora do escopo
+
+Chat, chamada de voz, controle remoto, gravação, contas de usuário, salas permanentes.
