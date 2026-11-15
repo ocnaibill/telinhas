@@ -30,6 +30,7 @@ Como o vídeo é P2P em malha, a banda de **upload** de quem transmite cresce co
 | [MARCOS.md](docs/MARCOS.md) | Marcos do MVP (M0 a M7) e critérios de saída |
 | [ENSAIO-M2.md](docs/ENSAIO-M2.md) | Guia do ensaio do M2 entre redes |
 | [M2-RELATORIO.md](docs/M2-RELATORIO.md) | Relatório parcial do M2 sobre o `webrtc-rs` |
+| [PLANO-M3.md](docs/PLANO-M3.md) | Plano do M3: captura e encode por hardware no Windows |
 | [design/README.md](docs/design/README.md) | Mapa das telas e o que falta desenhar |
 
 ## Plataformas previstas
