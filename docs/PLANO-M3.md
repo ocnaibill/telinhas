@@ -40,6 +40,21 @@ Fora do M3 (por já estarem em outros marcos): trocar a janela sem derrubar (M6)
 
 **NVIDIA** (mantenedor). O `nvidia-smi` visto do WSL mostra uma **GeForce RTX 2070 SUPER**, driver 621.14. O encode de hardware é o NVENC, pelo `h264_nvenc` do FFmpeg, sem depender do Media Foundation. AMD e Intel ficam sem teste por enquanto. Se a máquina for um notebook com GPU integrada e dedicada, a sonda do M3a mostra qual o FFmpeg está usando.
 
+## 2.4 Resultado da sonda (M3a, 15/11/2026)
+
+Máquina de teste: Windows 11 build 10.0.26300, GeForce RTX 2070 SUPER (8 GB, driver 621.14), monitores 1920×1080 a 144 Hz (principal) e 2560×1080 a 60 Hz.
+
+| Item | Resultado |
+|------|-----------|
+| Windows Graphics Capture | Disponível; a API de **desligar a borda** e a de **desligar o cursor** existem. Falta confirmar na prática que a borda realmente some sem pedir permissão (M3b) |
+| `h264_nvenc` 1080p60 | Funciona: 322 fps (cerca de 3,1 ms por quadro) |
+| `h264_nvenc` 1440p60 | Funciona: 286 fps (cerca de 3,5 ms por quadro) |
+| `h264_mf` (Media Foundation) | Funciona: 313 fps em 1080p60 e 190 fps em 1440p60. Fica como plano B |
+| `h264_qsv`, `h264_amf` | Falham, como esperado (não há GPU Intel nem AMD) |
+| Lista de janelas | Funciona: mostra as janelas de Alt-Tab, com processo, título e tamanho |
+
+Os tempos de encode incluem a geração do quadro sintético e a partida do `ffmpeg`, então o encoder real é no mínimo tão rápido quanto isso. Com cerca de 3 ms por quadro, o RNF-03 (≤ 8 ms) tem folga grande no NVENC.
+
 ## 3. Passos
 
 Cada passo termina com algo que você roda e me devolve.

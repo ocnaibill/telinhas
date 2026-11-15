@@ -105,6 +105,91 @@ pub struct CaptureSupport {
     pub cursor_toggle: bool,
 }
 
+/// What to capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// A monitor, by the `index` of [`list_monitors`].
+    Monitor(usize),
+    /// A window, by the `handle` of [`list_windows`].
+    Window(isize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Options {
+    /// Draw the mouse cursor into the picture.
+    pub cursor: bool,
+    /// Leave the system's capture border on (the yellow outline).
+    pub border: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            cursor: true,
+            border: true,
+        }
+    }
+}
+
+/// One captured picture, borrowed for the duration of the callback.
+pub struct FrameRef<'a> {
+    pub width: u32,
+    pub height: u32,
+    /// Bytes per row; at least `width * 4`.
+    pub stride: usize,
+    /// Pixels as BGRA, `stride * height` bytes.
+    pub bgra: &'a [u8],
+    /// When the system produced the frame, in microseconds on a clock that
+    /// only means something relative to other frames of the same session.
+    pub system_micros: i64,
+    /// How long copying the frame from the GPU took, in microseconds.
+    pub copy_micros: u32,
+}
+
+/// A running capture. Dropping it stops the capture.
+pub struct Session {
+    inner: imp::Session,
+}
+
+impl Session {
+    /// Stops the capture now. Dropping the session does the same.
+    pub fn stop(self) {
+        drop(self.inner);
+    }
+
+    /// Size of the source when the capture began.
+    pub fn size(&self) -> (u32, u32) {
+        self.inner.size()
+    }
+
+    /// What happened when the capture border was asked to go away, in words.
+    pub fn border_status(&self) -> String {
+        self.inner.border_status()
+    }
+
+    /// Whether the system accepted the cursor setting.
+    pub fn cursor_applied(&self) -> bool {
+        self.inner.cursor_applied()
+    }
+}
+
+/// Starts capturing `source`. `on_frame` runs on a system thread for every
+/// frame, so it should return quickly.
+pub fn start(
+    source: Source,
+    options: Options,
+    on_frame: impl FnMut(FrameRef<'_>) + Send + 'static,
+) -> Result<Session> {
+    Ok(Session {
+        inner: imp::start(source, options, Box::new(on_frame))?,
+    })
+}
+
+/// CPU time used so far by this process (user and kernel), in seconds.
+pub fn process_cpu_seconds() -> Option<f64> {
+    imp::process_cpu_seconds()
+}
+
 /// Makes pixel sizes real instead of scaled. Call once, early.
 pub fn init_dpi_awareness() {
     imp::init_dpi_awareness();

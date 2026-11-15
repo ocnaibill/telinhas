@@ -47,6 +47,20 @@ enum Command {
     },
     /// Lists monitors, windows and GPUs, and tests which H.264 encoders work.
     Probe,
+    /// Captures a monitor or window and measures it, without encoding.
+    Capture {
+        /// `monitor:N`, `window:HANDLE` or `window:TEXT` (title or program).
+        #[arg(long)]
+        source: String,
+        #[arg(long, default_value_t = 10)]
+        seconds: u64,
+        /// Leave the mouse cursor out of the picture.
+        #[arg(long)]
+        no_cursor: bool,
+        /// Ask Windows to hide the capture border.
+        #[arg(long)]
+        no_border: bool,
+    },
     /// Receives, decodes and measures.
     Recv {
         #[command(flatten)]
@@ -118,6 +132,12 @@ async fn main() -> Result<()> {
             send(&room, cfg).await
         }
         Command::Recv { room } => recv(&room).await,
+        Command::Capture {
+            source,
+            seconds,
+            no_cursor,
+            no_border,
+        } => telinhas_spike::capture_cmd::run(&source, seconds, !no_cursor, !no_border),
         Command::Probe => {
             telinhas_spike::probe::run();
             Ok(())
