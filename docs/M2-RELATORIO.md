@@ -90,6 +90,31 @@ Windows → MacBook, mesma rota. **Atenção:** o transmissor rodou o executáve
 - No ensaio 1, com o mesmo `--noise 4`, a estimativa colapsou para 150 kbps. Desta vez não. A diferença provável é o estado da rede móvel naquele momento, mas não está provada.
 - `--noise 4` não serve como teste de fps: é conteúdo quase incompressível. O número de fps desta rodada diz pouco sobre o `webrtc-rs`.
 
+## Ensaio 4 entre redes (`--noise 3`, build corrigido, 520 s)
+
+Windows → MacBook em 4G, executável novo nos dois lados. Interrompido com Ctrl+C aos 8 min 40 s (o critério formal é de 10 minutos).
+
+| Medida | Resultado |
+|--------|-----------|
+| Quadros | 15 266 gerados, 15 266 enviados, **0 descartados**, 1 pulado pelo encoder |
+| Receptor | 15 265 decodificados, **0 perdidos**; cerca de 29,3 fps de média |
+| Ida e volta (transmissor) | p50 = **86,6 ms**, p95 = **110 ms**, máximo 302 ms (um único pico) |
+| Janelas de 2 s, no fim da rodada | p50 entre 97 e 105 ms, p95 entre 108 e 137 ms, máximo até 154 ms; receptor com variação de ±30 ms sobre a linha de base |
+| Taxa | 294 kbps; estimativa do GCC no teto (8 Mbps), sem uso |
+
+**Leitura.** A correção funcionou: sem descartes, sem perda de quadros e sem picos persistentes em quase 9 minutos, na mesma rota que dava picos de 0,8 a 2 s e 13,6% de descartes no ensaio 2. Isso reforça que o problema do ensaio 2 era o critério de descarte do spike, e que os picos daquela hora vieram da rede móvel naquele momento.
+
+**Contra as metas (`REQUISITOS-NAO-FUNCIONAIS.md`):**
+
+| Meta | Valor medido | Situação |
+|------|--------------|----------|
+| RNF-01 latência ≤ 300 ms (P2P direto) | ida e volta p50 87 ms, p95 110 ms, com codec por software | Atende (a ida é menor que o ida e volta) |
+| RNF-04 FPS ≥ 95% do configurado | 29,3 de 30 fps (97,7%) | Atende |
+| RNF-15 perda até 2% | 0 quadros perdidos | Atende |
+| M2: 10 minutos estáveis | 8 min 40 s estáveis | Quase; falta 1 min 20 s |
+
+**Limites do que foi provado:** um único transmissor para um único espectador; conteúdo leve (0,3 Mbps; o `--noise 4` do ensaio 3 mostrou 3,2 Mbps estáveis, mas com encoder limitando o fps); codec por software; sem TURN (a conexão foi direta); sem queda de banda forçada nem PLI.
+
 ## O que falta
 
 | Item | Como |
@@ -103,4 +128,4 @@ Windows → MacBook, mesma rota. **Atenção:** o transmissor rodou o executáve
 
 ## Recomendação provisória
 
-Manter o `webrtc-rs` (DEC-38), **ainda sem concluir**. Entre redes diferentes ele conectou, entregou vídeo por 3 minutos com perda de rede próxima de zero e latência p50 de cerca de 100 ms. O que resta provar é o comportamento sob banda de verdade (o GCC ficou ocioso) e a estabilidade de 10 minutos. Os picos de latência parecem vir do 4G.
+**Manter o `webrtc-rs` 0.21.x (DEC-38).** Entre redes diferentes ele conectou sem relay, entregou 15 mil quadros em 8 min 40 s sem perder nenhum, com ida e volta p50 de 87 ms e p95 de 110 ms, e sustentou 3,2 Mbps por 3 minutos sem fila crescente. A reescrita sobre o núcleo sem I/O traz GCC, TWCC e interceptors funcionando. O que ainda não foi testado (PLI no transmissor, TURN, várias conexões em malha, hardware) é trabalho dos marcos M3 a M6 e não é motivo para trocar de biblioteca agora. Se algum desses pontos falhar, a alternativa já mapeada é o `str0m`.
