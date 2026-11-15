@@ -59,6 +59,11 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-43 | O app avisa que, por ser P2P, os outros participantes da sala veem o IP do usuário. | Mantenedor (aceitou proposta) |
 | DEC-44 | Trocar a fonte capturada (DEC-11) reconfigura o encoder para a nova resolução/proporção e força um keyframe, sem renegociar a conexão. | Mantenedor (aceitou proposta) |
 | DEC-45 | No Linux o MVP suporta só Wayland (PipeWire + `xdg-desktop-portal`). X11 fica fora do escopo por enquanto. | Mantenedor (aceitou proposta) |
+| DEC-46 | Sinalização por WebSocket sobre TLS, mensagens JSON com `type` e versão do protocolo. Detalhes em `docs/PROTOCOLO.md`. | Mantenedor (aceitou proposta) |
+| DEC-47 | Pedido de entrada com aprovação espera o administrador por 60 s; sem resposta conta como recusa. | Mantenedor (aceitou proposta) |
+| DEC-48 | Limite de tentativas: 10 códigos inexistentes por minuto por IP, depois bloqueio de 5 minutos. IP real via `CF-Connecting-IP`. | Mantenedor (aceitou proposta) |
+| DEC-49 | Troca de administrador: o servidor avisa a sala toda. Sem ninguém para assumir, a sala entra nos 5 minutos de espera (DEC-23). | Mantenedor (aceitou proposta) |
+| DEC-50 | Participante que cai fica "reconectando" por 60 s; passado esse prazo é removido e, se for o administrador, o papel passa ao participante mais antigo (DEC-22). | Mantenedor (aceitou proposta) |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -87,7 +92,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-45.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-50.
 
 ## 5. Fora do escopo
 
