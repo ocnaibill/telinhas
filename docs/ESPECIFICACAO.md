@@ -1,6 +1,6 @@
 # Telinhas — Especificação
 
-> Status: ideação (15/11/2026). Decisões do mantenedor viram DEC-nnn e não são reabertas sem pedido dele.
+> Status: especificação, antes do código (15/11/2026). Decisões do mantenedor viram DEC-nnn e não são reabertas sem pedido dele.
 
 ## 1. Visão
 
@@ -51,6 +51,14 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-35 | Ao entrar numa sala, a pessoa escolhe o modo: **Assistindo** (mic e tela desligados) ou **Transmitindo** (abre a configuração de transmissão logo ao entrar). | Mantenedor |
 | DEC-36 | A configuração de transmissão é um **modal** sobre a sala (DEC-20). Resoluções e FPS oferecidos vêm do hardware e da fonte capturada (DEC-04), não de uma lista fixa. | Mantenedor |
 | DEC-37 | Tudo o que o mockup não mostra e esta especificação exige entra no design: ver `docs/design/README.md`. | Mantenedor |
+| DEC-38 | WebRTC: começar com `webrtc-rs`. Será testado na prática e, se não der conta (controle de congestionamento, simulcast, estabilidade), reavaliamos `str0m` ou binding de libwebrtc. | Mantenedor |
+| DEC-39 | Codecs: FFmpeg (LGPL, ligação dinâmica) atrás de uma trait `Encoder`. APIs nativas por sistema podem substituir cada backend depois, se a medição pedir. | Mantenedor (aceitou proposta) |
+| DEC-40 | Biblioteca de UI decidida junto com as telas. Critério principal: exibir vários vídeos decodificados como texturas de GPU. | Mantenedor (aceitou proposta) |
+| DEC-41 | Captura com a API nativa de cada sistema (Windows Graphics Capture, ScreenCaptureKit, PipeWire). A exclusão de áudio por aplicativo será validada em protótipo nos três sistemas antes de ser tratada como garantida. | Mantenedor (aceitou proposta) |
+| DEC-42 | Reconexão (DEC-10): o cliente gera um token de sessão, válido enquanto a sala existir. Com ele o servidor reconhece o participante e restaura papel de administrador, apelido e aprovação já concedida. | Mantenedor (aceitou proposta) |
+| DEC-43 | O app avisa que, por ser P2P, os outros participantes da sala veem o IP do usuário. | Mantenedor (aceitou proposta) |
+| DEC-44 | Trocar a fonte capturada (DEC-11) reconfigura o encoder para a nova resolução/proporção e força um keyframe, sem renegociar a conexão. | Mantenedor (aceitou proposta) |
+| DEC-45 | No Linux o MVP suporta só Wayland (PipeWire + `xdg-desktop-portal`). X11 fica fora do escopo por enquanto. | Mantenedor (aceitou proposta) |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -79,7 +87,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-45.
 
 ## 5. Fora do escopo
 

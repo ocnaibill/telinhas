@@ -42,6 +42,7 @@ Camada baixa (DEC-05): codificada só quando existe ao menos um espectador pedin
 - Estado vive no servidor de sinalização, em memória.
 - Código: 8 símbolos de um alfabeto de 32 (Crockford base32 sem caracteres ambíguos), gerado com RNG criptográfico (DEC-07).
 - Limite de tentativas de entrada por IP no servidor, para tornar inviável adivinhar códigos.
+- Reconexão: o cliente gera um token de sessão; o servidor o usa para restaurar papel, apelido e aprovação (DEC-42).
 - Papel de administrador: criador no início; transfere-se ao participante mais antigo se ele sair (DEC-22).
 - Sala sem membros expira após 5 minutos de graça (DEC-10, DEC-23). Depois disso o código pode ser sorteado de novo (DEC-25).
 - Apelidos repetidos recebem sufixo, ex.: `Bianco (2)` (DEC-26).
@@ -55,7 +56,7 @@ Camada baixa (DEC-05): codificada só quando existe ao menos um espectador pedin
 | macOS | ScreenCaptureKit | ScreenCaptureKit (macOS 13+); exige permissão de gravação de tela |
 | Linux | PipeWire via `xdg-desktop-portal` | PipeWire, por nó de áudio |
 
-Troca de janela sem derrubar (DEC-11): a fonte de captura é trocada por baixo da mesma trilha WebRTC, sem renegociar a conexão.
+Troca de janela sem derrubar (DEC-11): a fonte de captura é trocada por baixo da mesma trilha WebRTC, sem renegociar a conexão. O encoder é reconfigurado para a nova resolução/proporção e emite um keyframe (DEC-44).
 
 ## 5. Codificação
 
@@ -74,7 +75,8 @@ Medida por participante (RTT e atraso de exibição) e exibida em um monitor na 
 
 ## 8. Questões técnicas em aberto
 
-- Biblioteca de WebRTC: `webrtc-rs` (Rust puro, menos maduro) ou binding de libwebrtc (mais maduro, dependência pesada).
-- Biblioteca de codecs: FFmpeg ou APIs nativas por sistema.
+- WebRTC: `webrtc-rs` por ora (DEC-38). Testar controle de congestionamento, simulcast e estabilidade; alternativas se falhar: `str0m` ou binding de libwebrtc.
+- Codecs: FFmpeg atrás de uma trait `Encoder` (DEC-39).
+- Exclusão de áudio por aplicativo: validar em protótipo nos três sistemas (DEC-41).
 - Como o app mede a banda de upload real do usuário para validar a estimativa.
 - Estratégia de adaptação de bitrate (controle de congestionamento) por espectador.
