@@ -24,12 +24,12 @@ Convenção: **RF** são os requisitos funcionais e **RNF** os não funcionais (
 
 ## M2 — Vídeo P2P simples (decisão sobre o webrtc-rs)
 
-- Dois clientes na mesma sala trocam vídeo de uma fonte sintética (padrão de teste ou arquivo), sem captura real.
+- Dois clientes na mesma sala trocam vídeo de uma fonte sintética (padrão de teste com contador de tempo), codificada em H.264 por software com `openh264` (DEC-56).
 - Negociação por `signal` e STUN público; TURN opcional (DEC-21).
-- Exibição em uma janela mínima.
-- **Teste da DEC-38:** verificar no `webrtc-rs` controle de congestionamento, estabilidade e suporte a H.264.
+- Receptor **sem janela**: decodifica, valida os quadros e mede a latência pelo contador desenhado na imagem. A janela mínima passa para o M4 (DEC-40, DEC-56).
+- **Teste da DEC-38:** verificar no `webrtc` 0.21.x controle de congestionamento, estabilidade, suporte a H.264 e a simulcast.
 
-**Saída:** vídeo estável por 10 minutos entre duas máquinas em redes diferentes. Relatório curto: o `webrtc-rs` serve ou trocamos (`str0m` ou libwebrtc). Essa é uma decisão do mantenedor.
+**Saída:** vídeo estável por 10 minutos entre duas máquinas em redes diferentes. Relatório curto: o `webrtc-rs` serve ou trocamos (`str0m` ou libwebrtc). Essa é uma decisão do mantenedor. O ensaio entre redes é feito pelo mantenedor, com o guia em `docs/ENSAIO-M2.md`.
 
 ## M3 — Captura real e encode por hardware (uma plataforma)
 

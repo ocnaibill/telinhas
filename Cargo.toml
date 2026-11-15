@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["app", "signaling"]
+members = ["app", "signaling", "spike"]
 
 [workspace.package]
 version = "0.0.0"
@@ -13,3 +13,11 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Software H.264 is far too slow unoptimized, and the spike tests run in debug.
+[profile.dev.package.openh264-sys2]
+opt-level = 3
+[profile.dev.package.openh264]
+opt-level = 3
+[profile.dev.package.telinhas-spike]
+opt-level = 3

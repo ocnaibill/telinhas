@@ -28,6 +28,8 @@ Como o vídeo é P2P em malha, a banda de **upload** de quem transmite cresce co
 | [PROTOCOLO.md](docs/PROTOCOLO.md) | Rascunho do protocolo de sinalização |
 | [REQUISITOS-NAO-FUNCIONAIS.md](docs/REQUISITOS-NAO-FUNCIONAIS.md) | Metas provisórias de latência, recursos, rede e segurança |
 | [MARCOS.md](docs/MARCOS.md) | Marcos do MVP (M0 a M7) e critérios de saída |
+| [ENSAIO-M2.md](docs/ENSAIO-M2.md) | Guia do ensaio do M2 entre redes |
+| [M2-RELATORIO.md](docs/M2-RELATORIO.md) | Relatório parcial do M2 sobre o `webrtc-rs` |
 | [design/README.md](docs/design/README.md) | Mapa das telas e o que falta desenhar |
 
 ## Plataformas previstas
