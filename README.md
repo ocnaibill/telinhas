@@ -26,6 +26,7 @@ Como o vídeo é P2P em malha, a banda de **upload** de quem transmite cresce co
 | [ESPECIFICACAO.md](docs/ESPECIFICACAO.md) | Fonte da verdade: decisões (DEC-nnn) e requisitos funcionais |
 | [ARQUITETURA.md](docs/ARQUITETURA.md) | Rascunho técnico: componentes, topologia, captura e codificação |
 | [PROTOCOLO.md](docs/PROTOCOLO.md) | Rascunho do protocolo de sinalização |
+| [REQUISITOS-NAO-FUNCIONAIS.md](docs/REQUISITOS-NAO-FUNCIONAIS.md) | Metas provisórias de latência, recursos, rede e segurança |
 | [design/README.md](docs/design/README.md) | Mapa das telas e o que falta desenhar |
 
 ## Plataformas previstas
