@@ -71,7 +71,7 @@ Copie as linhas que começam com `FINAL` dos dois lados. A do transmissor agora 
 - se a imagem travou em algum momento, e quando;
 - a curva da estimativa (as linhas `send:` a cada 2 s, ou pelo menos o início, o meio e o fim).
 
-Rodadas sugeridas (a 3ª rodada confirma a correção dos acks; a 4ª, com `--noise 4`, é a que exercita o controle de congestionamento de verdade): primeiro `--noise 3` por 3 minutos (teste normal); se estiver bem, `--noise 4` (estresse); e, se puder, uma com uma ponta em rede móvel, que é onde o controle de congestionamento aparece.
+Rodadas sugeridas: `--noise 3` com `--seconds 600` (o critério de 10 minutos do M2). Confira que a linha `send:` tem `generated=`; se não tiver, você está rodando o executável antigo (use `C:\dev\target\release\telinhas-spike.exe`). `--noise 4` já foi medido (3,2 Mbps a cerca de 7 fps) e não precisa ser repetido; e, se puder, uma com uma ponta em rede móvel, que é onde o controle de congestionamento aparece.
 
 Dica de build no Windows: se você compila a pasta do WSL (`\\wsl.localhost\...`) pelo PowerShell, o Windows e o Linux gravam em `target/` ao mesmo tempo. Para evitar que se atrapalhem, use `$env:CARGO_TARGET_DIR="C:\dev\target"` antes do `cargo build`.
 

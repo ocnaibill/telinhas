@@ -73,6 +73,23 @@ Windows (transmissor) → MacBook em 4G (receptor). Teste de velocidade do Mac n
 
 **Falta:** repetir com `--noise 3` para confirmar a correção e rodar `--noise 4` para finalmente exercitar o GCC com banda de verdade.
 
+## Ensaio 3 entre redes (`--noise 4`, 180 s, transmissor com build antigo)
+
+Windows → MacBook, mesma rota. **Atenção:** o transmissor rodou o executável antigo (a saída não tem os contadores `generated=`), então esta rodada **não testa** a correção dos acks. O receptor (Mac) já tinha a versão nova, e as duas são compatíveis.
+
+| Medida | Resultado |
+|--------|-----------|
+| Vazão recebida | cerca de 3,2 Mbps médios por 170 s, sem queda |
+| Estimativa do GCC | subiu direto de 1,5 a 8 Mbps (o teto) em 22 s e ficou lá. Não houve o colapso do ensaio 1 |
+| Ida e volta (transmissor) | p50 ≈ 213 ms estável; p95 de 514 caiu para 362 ms; máximo 610 ms. **Sem crescimento de fila** nos 3 minutos |
+| Janelas de 2 s no receptor | p50 estável em torno de +137 ms sobre o ensaio 2; p95 entre 334 e 430 ms; só picos isolados no máximo de cada janela |
+| Quadros por segundo | cerca de 7,4 fps (1253 quadros em 170 s). **O limite é o encoder por software**, não a rede: a 3,2 Mbps o conteúdo de `--noise 4` não cabe em 30 fps e o `openh264` pula quadros |
+
+**Leitura.**
+- O caminho aguentou 3,2 Mbps contínuos por 3 minutos sem fila crescente, e o GCC não precisou recuar. Isso é um bom sinal para a biblioteca.
+- No ensaio 1, com o mesmo `--noise 4`, a estimativa colapsou para 150 kbps. Desta vez não. A diferença provável é o estado da rede móvel naquele momento, mas não está provada.
+- `--noise 4` não serve como teste de fps: é conteúdo quase incompressível. O número de fps desta rodada diz pouco sobre o `webrtc-rs`.
+
 ## O que falta
 
 | Item | Como |
