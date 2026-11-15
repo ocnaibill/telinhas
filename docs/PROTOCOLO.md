@@ -1,6 +1,6 @@
 # Telinhas — Protocolo de sinalização (rascunho)
 
-> Deriva de DEC-07 a DEC-10, DEC-22 a DEC-26, DEC-32, DEC-35, DEC-42 e DEC-46 a DEC-54. Nada aqui carrega vídeo: o servidor só repassa SDP/ICE e guarda o estado das salas.
+> Deriva de DEC-07 a DEC-10, DEC-22 a DEC-26, DEC-32, DEC-35, DEC-42, DEC-46 a DEC-55. Nada aqui carrega vídeo: o servidor só repassa SDP/ICE e guarda o estado das salas.
 
 ## 1. Transporte
 
@@ -42,7 +42,7 @@
 
 Estado guardado por sala: código, lista de participantes (`peer_id`, apelido, `session_token`, ordem de entrada, conectado ou não), participantes "dormentes", administrador, flag `require_approval`, fila de pedidos pendentes e transmissões ativas.
 
-**Dormentes (implementa a DEC-42).** Quem é removido por estourar os 60 s não perde o token: fica guardado como dormente enquanto a sala existir. Se voltar com o mesmo token, retoma o `peer_id`, o apelido e a aprovação já concedida, sem novo pedido. Só retoma o papel de administrador se a sala estiver vazia no momento (se outro já assumiu, o papel não volta). Quem sai de propósito (`leave_room`) não vira dormente. Tudo isso some quando a sala expira.
+**Dormentes (DEC-42 e DEC-55).** Quem é removido por estourar os 60 s não perde o token: fica guardado como dormente enquanto a sala existir. Se voltar com o mesmo token, retoma o `peer_id`, o apelido e a aprovação já concedida, sem novo pedido. Só retoma o papel de administrador se a sala estiver vazia no momento (se outro já assumiu, o papel não volta). Quem sai de propósito (`leave_room`) não vira dormente. Tudo isso some quando a sala expira.
 
 **Sala vazia.** Quem entra numa sala sem participantes (e sem token conhecido) vira administrador, e não precisa de aprovação, pois não há quem aprove.
 

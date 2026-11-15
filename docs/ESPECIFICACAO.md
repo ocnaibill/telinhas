@@ -68,6 +68,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-52 | Máquina de referência para medir desempenho: notebook comum com GPU integrada e encoder H.264 por hardware (Intel QSV, AMD AMF ou Apple Silicon), com 100 Mbps de upload. As metas de `docs/REQUISITOS-NAO-FUNCIONAIS.md` são provisórias e servem de alvo do protótipo, até a medição. | Mantenedor (aceitou proposta) |
 | DEC-53 | Marcos do MVP em `docs/MARCOS.md` (M0 a M7). A primeira plataforma de captura e encode (M3) é o Windows (Windows Graphics Capture e process loopback); macOS e Linux/Wayland ficam para o M7. | Mantenedor (aceitou proposta) |
 | DEC-54 | Servidor de sinalização em `tokio` + `axum` (WebSocket, JSON com `serde`, códigos com `rand`, ids com `uuid`). TLS fica por conta do Cloudflare Tunnel (DEC-46). | Mantenedor (aceitou proposta) |
+| DEC-55 | Detalhes de sala (`docs/PROTOCOLO.md`): (a) quem é removido por timeout fica como participante dormente enquanto a sala existir, e ao voltar com o token retoma `peer_id`, apelido e aprovação, e o papel de administrador só se a sala estiver vazia; quem sai de propósito não fica dormente; (b) quem entra numa sala vazia vira administrador, sem aprovação; (c) desligar a exigência de aprovação aceita todos os pedidos pendentes. | Mantenedor (aceitou proposta) |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -96,7 +97,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-54.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-55.
 
 ## 5. Fora do escopo
 
