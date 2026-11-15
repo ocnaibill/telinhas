@@ -74,6 +74,19 @@ impl Default for Config {
     }
 }
 
+/// Parses a comma-separated list of IP addresses, such as
+/// `10.0.0.5,fd00::5`. Empty items are ignored.
+pub fn parse_ip_list(list: &str) -> Result<Vec<IpAddr>, String> {
+    list.split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(|item| {
+            item.parse()
+                .map_err(|_| format!("not an IP address: {item:?}"))
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ConnId(u64);
 
@@ -1134,5 +1147,24 @@ impl Hub {
                 hub.schedule(timers);
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_ip_lists() {
+        let ips = parse_ip_list(" 10.0.0.5, fd00::5 ,,127.0.0.1").unwrap();
+        assert_eq!(ips.len(), 3);
+        assert_eq!(ips[0], IpAddr::from([10, 0, 0, 5]));
+        assert!(parse_ip_list("").unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_bad_ip_lists() {
+        assert!(parse_ip_list("10.0.0.5, nope").is_err());
+        assert!(parse_ip_list("10.0.0.0/24").is_err());
     }
 }

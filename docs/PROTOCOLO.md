@@ -131,7 +131,7 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 
 ## 10. Implementação
 
-Servidor em `signaling/` (DEC-54): `tokio` e `axum`, JSON com `serde`. Endpoints `GET /ws` (WebSocket) e `GET /healthz`. Porta por `TELINHAS_BIND` (padrão `127.0.0.1:8080`). Os testes de `signaling/tests/flow.rs` cobrem os fluxos deste documento, com prazos encurtados.
+Servidor em `signaling/` (DEC-54): `tokio` e `axum`, JSON com `serde`. Endpoints `GET /ws` (WebSocket) e `GET /healthz`. Porta por `TELINHAS_BIND` (padrão `127.0.0.1:8080`). `TELINHAS_TRUSTED_PROXIES` lista, separados por vírgula, os IPs de onde vem o `cloudflared` (padrão: só loopback); só conexões desses IPs podem informar o IP real pelo `CF-Connecting-IP`. Os testes de `signaling/tests/flow.rs` cobrem os fluxos deste documento, com prazos encurtados.
 
 ## 11. Questões ainda abertas
 

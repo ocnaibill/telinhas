@@ -10,6 +10,6 @@ pub mod limiter;
 pub mod protocol;
 pub mod server;
 
-pub use hub::{Config, Hub};
+pub use hub::{Config, Hub, parse_ip_list};
 pub use protocol::PROTOCOL_VERSION;
 pub use server::{router, serve};
