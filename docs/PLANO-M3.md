@@ -55,6 +55,21 @@ Máquina de teste: Windows 11 build 10.0.26300, GeForce RTX 2070 SUPER (8 GB, dr
 
 Os tempos de encode incluem a geração do quadro sintético e a partida do `ffmpeg`, então o encoder real é no mínimo tão rápido quanto isso. Com cerca de 3 ms por quadro, o RNF-03 (≤ 8 ms) tem folga grande no NVENC.
 
+## 2.5 Primeiras medições de captura (M3b, monitor de 144 Hz)
+
+Quatro rodadas de 10 s, duas com a tela parada e depois com uma janela sendo arrastada, com e sem `--max-fps 60`.
+
+| Achado | Leitura |
+|--------|---------|
+| Tela parada: 0 fps | O Windows Graphics Capture **só entrega quadro quando a imagem muda**. Para o app, isso exige repetir o último quadro (e emitir quadros-chave) quando nada muda, senão o espectador novo não recebe imagem e o encoder fica sem ritmo |
+| Com movimento: intervalo p50 de 20,8 ms (48 fps) | É exatamente 3 atualizações de 144 Hz. Nem 144 nem 60 fps. A causa ainda não está clara: arrastar uma janela pode não gerar mais que isso, ou o nosso tratamento do quadro atrasava a devolução do buffer |
+| Mesmo valor com e sem `--max-fps 60` | O teto de 60 não foi o fator limitante nesses testes, então não deu para ver o efeito dele |
+| Cópia GPU→CPU: média de 2,5 a 4 ms, p95 de 7 a 8 ms | Alto para um orçamento de 16,7 ms por quadro a 60 fps. Confirma que o caminho sem cópia (textura direto para o encoder) vale a pena |
+| CPU: 12 a 26% de um núcleo a 40 a 48 fps | Parte é espera pela GPU no `Map` |
+| Janela do app difícil de arrastar no início (`--max-fps 60`) | Relato do mantenedor. Causa desconhecida, a investigar com testes A/B |
+
+Mudanças feitas depois dessas medições: o pool passou de 2 para 4 buffers e o quadro é devolvido ao pool logo depois de enfileirar a cópia, em vez de depois da leitura.
+
 ## 3. Passos
 
 Cada passo termina com algo que você roda e me devolve.

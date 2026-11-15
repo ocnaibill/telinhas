@@ -326,7 +326,9 @@ pub fn capture_support() -> Result<CaptureSupport> {
 
 // ----- capture session ---------------------------------------------------------
 
-const BUFFERS: i32 = 2;
+/// Buffers in the capture pool. More slack means a slow consumer drops
+/// fewer frames.
+const BUFFERS: i32 = 4;
 const PIXEL_FORMAT: DirectXPixelFormat = DirectXPixelFormat::B8G8R8A8UIntNormalized;
 
 type FrameCallback = Box<dyn FnMut(FrameRef<'_>) + Send>;
@@ -392,6 +394,10 @@ impl Pipeline {
         };
 
         unsafe { self.context.CopyResource(staging, &texture) };
+        // The copy is queued on the GPU, so the frame can go back to the pool
+        // now instead of after the (slow) readback below.
+        let system_micros = frame.SystemRelativeTime()?.Duration / 10;
+        let _ = frame.Close();
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         unsafe {
             self.context
@@ -406,7 +412,7 @@ impl Pipeline {
             height: desc.Height,
             stride,
             bgra: bytes,
-            system_micros: frame.SystemRelativeTime()?.Duration / 10,
+            system_micros,
             copy_micros,
         });
         unsafe { self.context.Unmap(staging, 0) };
