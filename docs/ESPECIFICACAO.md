@@ -66,6 +66,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-50 | Participante que cai fica "reconectando" por 60 s; passado esse prazo é removido e, se for o administrador, o papel passa ao participante mais antigo (DEC-22). | Mantenedor (aceitou proposta) |
 | DEC-51 | Licença do projeto: Apache-2.0 (concessão explícita de patentes, relevante para codecs; compatível com FFmpeg por ligação dinâmica sob LGPL). | Mantenedor (aceitou proposta) |
 | DEC-52 | Máquina de referência para medir desempenho: notebook comum com GPU integrada e encoder H.264 por hardware (Intel QSV, AMD AMF ou Apple Silicon), com 100 Mbps de upload. As metas de `docs/REQUISITOS-NAO-FUNCIONAIS.md` são provisórias e servem de alvo do protótipo, até a medição. | Mantenedor (aceitou proposta) |
+| DEC-53 | Marcos do MVP em `docs/MARCOS.md` (M0 a M7). A primeira plataforma de captura e encode (M3) é o Windows (Windows Graphics Capture e process loopback); macOS e Linux/Wayland ficam para o M7. | Mantenedor (aceitou proposta) |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -94,7 +95,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-52.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-53.
 
 ## 5. Fora do escopo
 
