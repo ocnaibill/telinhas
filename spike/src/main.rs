@@ -60,6 +60,9 @@ enum Command {
         /// Ask Windows to hide the capture border.
         #[arg(long)]
         no_border: bool,
+        /// Ask Windows for at most this many frames per second.
+        #[arg(long)]
+        max_fps: Option<u32>,
     },
     /// Receives, decodes and measures.
     Recv {
@@ -137,7 +140,8 @@ async fn main() -> Result<()> {
             seconds,
             no_cursor,
             no_border,
-        } => telinhas_spike::capture_cmd::run(&source, seconds, !no_cursor, !no_border),
+            max_fps,
+        } => telinhas_spike::capture_cmd::run(&source, seconds, !no_cursor, !no_border, max_fps),
         Command::Probe => {
             telinhas_spike::probe::run();
             Ok(())

@@ -77,27 +77,41 @@ fn parse_source(text: &str) -> Result<Source> {
     }
 }
 
-pub fn run(source: &str, seconds: u64, cursor: bool, border: bool) -> Result<()> {
+pub fn run(
+    source: &str,
+    seconds: u64,
+    cursor: bool,
+    border: bool,
+    max_fps: Option<u32>,
+) -> Result<()> {
     capture::init_dpi_awareness();
     let source = parse_source(source)?;
     let acc = Arc::new(Mutex::new(Acc::default()));
     let handler_acc = Arc::clone(&acc);
 
-    let session = capture::start(source, Options { cursor, border }, move |frame| {
-        let mut acc = handler_acc.lock().unwrap();
-        acc.size = (frame.width, frame.height);
-        acc.frames += 1;
-        acc.window_frames += 1;
-        let copy_ms = f64::from(frame.copy_micros) / 1000.0;
-        acc.copies_ms.push(copy_ms);
-        acc.window_copies_ms.push(copy_ms);
-        if let Some(last) = acc.last_micros {
-            let gap = (frame.system_micros - last) as f64 / 1000.0;
-            acc.intervals_ms.push(gap);
-            acc.window_intervals_ms.push(gap);
-        }
-        acc.last_micros = Some(frame.system_micros);
-    })?;
+    let session = capture::start(
+        source,
+        Options {
+            cursor,
+            border,
+            max_fps,
+        },
+        move |frame| {
+            let mut acc = handler_acc.lock().unwrap();
+            acc.size = (frame.width, frame.height);
+            acc.frames += 1;
+            acc.window_frames += 1;
+            let copy_ms = f64::from(frame.copy_micros) / 1000.0;
+            acc.copies_ms.push(copy_ms);
+            acc.window_copies_ms.push(copy_ms);
+            if let Some(last) = acc.last_micros {
+                let gap = (frame.system_micros - last) as f64 / 1000.0;
+                acc.intervals_ms.push(gap);
+                acc.window_intervals_ms.push(gap);
+            }
+            acc.last_micros = Some(frame.system_micros);
+        },
+    )?;
 
     let (width, height) = session.size();
     println!("capturing {source:?} at {width}x{height}");
@@ -110,6 +124,7 @@ pub fn run(source: &str, seconds: u64, cursor: bool, border: bool) -> Result<()>
         }
     );
     println!("border: {}", session.border_status());
+    println!("frame rate cap: {}", session.max_fps_status());
 
     let started = Instant::now();
     let cpu_start = capture::process_cpu_seconds().unwrap_or(0.0);

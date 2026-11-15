@@ -31,6 +31,10 @@ impl Session {
         String::new()
     }
 
+    pub fn max_fps_status(&self) -> String {
+        String::new()
+    }
+
     pub fn cursor_applied(&self) -> bool {
         false
     }

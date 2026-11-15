@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use windows::Foundation::Metadata::ApiInformation;
-use windows::Foundation::TypedEventHandler;
+use windows::Foundation::{TimeSpan, TypedEventHandler};
 use windows::Graphics::Capture::{
     Direct3D11CaptureFramePool, GraphicsCaptureAccess, GraphicsCaptureAccessKind,
     GraphicsCaptureItem, GraphicsCaptureSession,
@@ -419,6 +419,7 @@ pub struct Session {
     session: GraphicsCaptureSession,
     size: (u32, u32),
     border_status: String,
+    max_fps_status: String,
     cursor_applied: bool,
     _pipeline: Arc<Mutex<Pipeline>>,
 }
@@ -430,6 +431,10 @@ impl Session {
 
     pub fn border_status(&self) -> String {
         self.border_status.clone()
+    }
+
+    pub fn max_fps_status(&self) -> String {
+        self.max_fps_status.clone()
     }
 
     pub fn cursor_applied(&self) -> bool {
@@ -520,6 +525,21 @@ pub fn start(source: Source, options: Options, on_frame: FrameCallback) -> Resul
         turn_border_off(&session)
     };
 
+    let max_fps_status = match options.max_fps {
+        None => "no cap (source rate)".to_owned(),
+        Some(fps) if fps > 0 => {
+            // Windows 11 22H2 and later: the least time between two frames.
+            let interval = TimeSpan {
+                Duration: 10_000_000 / i64::from(fps),
+            };
+            match session.SetMinUpdateInterval(interval) {
+                Ok(()) => format!("asked for at most {fps} fps"),
+                Err(error) => format!("could not set a {fps} fps cap: {error}"),
+            }
+        }
+        Some(_) => "ignored a cap of 0".to_owned(),
+    };
+
     let pipeline = Arc::new(Mutex::new(Pipeline {
         context,
         device,
@@ -547,6 +567,7 @@ pub fn start(source: Source, options: Options, on_frame: FrameCallback) -> Resul
         session,
         size: (size.Width.max(0) as u32, size.Height.max(0) as u32),
         border_status,
+        max_fps_status,
         cursor_applied,
         _pipeline: pipeline,
     })

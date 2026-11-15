@@ -120,6 +120,9 @@ pub struct Options {
     pub cursor: bool,
     /// Leave the system's capture border on (the yellow outline).
     pub border: bool,
+    /// Ask the system to deliver at most this many frames per second.
+    /// `None` leaves it at the source's own rate.
+    pub max_fps: Option<u32>,
 }
 
 impl Default for Options {
@@ -127,6 +130,7 @@ impl Default for Options {
         Self {
             cursor: true,
             border: true,
+            max_fps: None,
         }
     }
 }
@@ -165,6 +169,11 @@ impl Session {
     /// What happened when the capture border was asked to go away, in words.
     pub fn border_status(&self) -> String {
         self.inner.border_status()
+    }
+
+    /// What happened when a frame rate cap was asked for, in words.
+    pub fn max_fps_status(&self) -> String {
+        self.inner.max_fps_status()
     }
 
     /// Whether the system accepted the cursor setting.
