@@ -49,7 +49,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-33 | Layouts de visualização na sala: **Grid dinâmico** e **Foco**. O layout 50/50 do mockup fica de fora. | Mantenedor |
 | DEC-34 | Cada espectador tem volume local por transmissão, que só afeta o próprio app. | Mantenedor |
 | DEC-35 | Ao entrar numa sala, a pessoa escolhe o modo: **Assistindo** (mic e tela desligados) ou **Transmitindo** (abre a configuração de transmissão logo ao entrar). | Mantenedor |
-| DEC-36 | A configuração de transmissão é um **modal** sobre a sala (DEC-20). Resoluções e FPS oferecidos vêm do hardware e da fonte capturada (DEC-04), não de uma lista fixa. | Mantenedor |
+| DEC-36 | A configuração de transmissão é um **modal** sobre a sala (DEC-20). Resoluções e FPS oferecidos vêm do hardware e da fonte capturada (DEC-04), não de uma lista fixa. Limitado a 60 FPS pela DEC-59. | Mantenedor |
 | DEC-37 | Tudo o que o mockup não mostra e esta especificação exige entra no design: ver `docs/design/README.md`. | Mantenedor |
 | DEC-38 | WebRTC: começar com `webrtc-rs`. Será testado na prática e, se não der conta (controle de congestionamento, simulcast, estabilidade), reavaliamos `str0m` ou binding de libwebrtc. | Mantenedor |
 | DEC-39 | Codecs: FFmpeg (LGPL, ligação dinâmica) atrás de uma trait `Encoder`. APIs nativas por sistema podem substituir cada backend depois, se a medição pedir. | Mantenedor (aceitou proposta) |
@@ -72,6 +72,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-56 | Plano do M2: usar o `webrtc` 0.21.x (reescrito sobre o núcleo sem I/O `rtc`); fonte sintética codificada com `openh264` (software); receptor sem janela, que decodifica, valida e mede a latência com um contador desenhado na imagem. A janela mínima passa para o M4, com a UI (DEC-40). | Mantenedor (aceitou proposta) |
 | DEC-57 | Encerra o M2 e confirma o `webrtc` 0.21.x (sobre o núcleo `rtc`) para o MVP, com base em `docs/M2-RELATORIO.md`: entre redes diferentes, 8 min 40 s sem perda de quadros, ida e volta p50 de 87 ms e p95 de 110 ms. Os 10 minutos do critério foram dispensados pelo mantenedor. Reavaliar (alternativa mapeada: `str0m`) se PLI no transmissor, TURN, malha com várias conexões ou o encode por hardware mostrarem limites nos marcos M3 a M6. | Mantenedor (aceitou proposta) |
 | DEC-58 | Plano do M3 em `docs/PLANO-M3.md`: máquina de teste Windows com GPU NVIDIA (NVENC); encode H.264 por hardware via FFmpeg (`h264_nvenc`), confirmando a DEC-39 no Windows; captura direto pela API do Windows (Windows Graphics Capture e DXGI, crate `windows`), com cópia para a CPU na primeira versão e caminho sem cópia como otimização. Fallback por software com `openh264`. | Mantenedor |
+| DEC-59 | O FPS máximo da transmissão é **60**. As opções de FPS oferecidas são as da DEC-36 (vindas da fonte e do hardware), limitadas a 60: um monitor de 144 Hz transmite no máximo 60 quadros por segundo, com o limite aplicado já na captura. Motivo: banda de upload na malha (DEC-03), custo de captura e encode, e a tela de quem assiste. | Mantenedor |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -100,7 +101,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-58.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-59.
 
 ## 5. Fora do escopo
 
