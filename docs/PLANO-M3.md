@@ -94,7 +94,15 @@ Método: `spike measure`, captura real do monitor 0, NVENC (`h264_nvenc`, preset
 |----------|-----------------|---------------|-----|------|--------------------------|-------------|
 | TestUFO "video game motion", stutter leve | 1080p60 | **18,9 Mbps** | 21,6 Mbps | 22,4 Mbps | **1,3 ms por quadro** | 49% |
 
+| mesmo conteúdo, `cq:23` (repetição) | 1080p60 | 18,5 Mbps | 21,2 Mbps | 21,7 Mbps | 1,3 ms | 50% |
+| mesmo conteúdo, `cq:28` | 1080p60 | **10,3 Mbps** | 12,1 Mbps | 12,5 Mbps | 1,2 ms | 48% |
+| mesmo conteúdo, `cbr:8000` | 1080p60 | **8,01 Mbps** (e 8,04 na repetição) | 9,0 Mbps | 9,3 a 9,4 Mbps | n/d | 49% |
+| mesmo conteúdo, `cq:23`, reduzido para 1280×720 | 720p30 | **6,0 Mbps** | 7,0 Mbps | 7,3 Mbps | **0,6 ms** | 32% |
+
 Leituras:
+- **O encoder respeita o alvo:** no modo CBR de 8 Mbps a média ficou em 8,0 Mbps, mas os picos por segundo chegaram a 9,3 e 9,4 Mbps (cerca de 17% acima). Para planejar o upload, usar o alvo com uma folga de cerca de 20%.
+- **Qualidade constante:** subir o `cq` de 23 para 28 cortou o bitrate em cerca de 45% (18,9 para 10,3 Mbps).
+- **Camada econômica:** 720p30 em `cq:23` precisou de cerca de um terço do bitrate do 1080p60 (6,0 contra 18,9 Mbps) para este conteúdo.
 - **RNF-03 atendido com folga:** 1,3 ms por quadro, contra a meta de 8 ms.
 - **Eu errei a previsão:** achei que o TestUFO daria um bitrate baixo, e deu 19 Mbps. Esse teste tem muito detalhe em movimento por toda a tela. Ele é um **limite superior** para conteúdo com movimento em tela cheia, não o caso típico de compartilhamento de tela (texto e janelas).
 - **O que isso diz sobre a suposição de ~8 Mbps:** para esse tipo de conteúdo em qualidade alta, ela é pouco menos da metade do que o conteúdo pede. Com 11 espectadores, 19 Mbps seriam cerca de 209 Mbps de upload no transmissor, mais do que qualquer conexão residencial.

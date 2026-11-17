@@ -33,6 +33,8 @@ pub struct Args {
     pub rate: String,
     pub scale: Option<(u32, u32)>,
     pub cursor: bool,
+    /// Also write the encoded stream (raw H.264) here, to judge it by eye.
+    pub save: Option<String>,
 }
 
 fn rate_args(rate: &str) -> Result<Vec<String>> {
@@ -167,6 +169,12 @@ pub fn run(args: &Args) -> Result<()> {
     let mut stderr = child.stderr.take().context("no stderr")?;
 
     let bytes_out = Arc::new(AtomicU64::new(0));
+    let mut saved = args
+        .save
+        .as_ref()
+        .map(std::fs::File::create)
+        .transpose()
+        .context("could not create the file for --save")?;
     let reader = {
         let bytes_out = Arc::clone(&bytes_out);
         std::thread::spawn(move || {
@@ -174,6 +182,9 @@ pub fn run(args: &Args) -> Result<()> {
             while let Ok(n) = stdout.read(&mut buffer) {
                 if n == 0 {
                     break;
+                }
+                if let Some(file) = saved.as_mut() {
+                    let _ = file.write_all(&buffer[..n]);
                 }
                 bytes_out.fetch_add(n as u64, Ordering::Relaxed);
             }

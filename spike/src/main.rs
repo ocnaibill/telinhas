@@ -65,6 +65,10 @@ enum Command {
         scale: Option<String>,
         #[arg(long)]
         no_cursor: bool,
+        /// Also save the encoded video to this file (raw H.264, open it with
+        /// VLC or mpv) to judge the quality by eye.
+        #[arg(long)]
+        save: Option<String>,
     },
     /// Captures a monitor or window and measures it, without encoding.
     Capture {
@@ -168,6 +172,7 @@ async fn main() -> Result<()> {
             rate,
             scale,
             no_cursor,
+            save,
         } => {
             let scale = scale
                 .map(|text| {
@@ -184,6 +189,7 @@ async fn main() -> Result<()> {
                 rate,
                 scale,
                 cursor: !no_cursor,
+                save,
             })
         }
         Command::Probe => {
