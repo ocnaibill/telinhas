@@ -162,9 +162,19 @@ O restante do M3c, no Windows: confirmar o mesmo NVENC com a captura real.
 
 O padrão passou a ser **0,5 para hardware** e 0,8 para software (que respeita o teto com rigor). O software em loopback fica em cerca de 50 ms.
 
-**Primeiro teste no Windows (captura real, software, 1080p30):** a conexão e o envio funcionaram (351 quadros de monitor e 465 de janela enviados), o Windows respondeu **`border: asked to hide (access allowed)`** (a permissão de esconder a borda foi concedida e o pedido aceito) e o cursor também foi aceito. Mas o receptor decodificou **0 quadros** nas duas rodadas. Causa ainda desconhecida: tentei reproduzir em loopback com quadros-chave grandes de 1080p e não reproduzi. O receptor agora imprime a linha `rx path:` (pacotes RTP, unidades remontadas, decodificadas, erros do decodificador e o primeiro erro) para mostrar onde os quadros somem, e o limite do remontador de quadros subiu de 64 para 1024 pacotes.
+**Captura real no Windows, enviada ao Mac pela internet (software, 1080p30, `--no-border`):**
 
-**Pendente:** o pedido de quadro-chave pelo espectador (PLI). O `webrtc` não entrega o PLI ao transmissor por uma chamada simples; o exemplo oficial usa um interceptor próprio. Por enquanto o transmissor manda um quadro-chave de segurança a cada 5 s (`--keyframe-seconds`). **Teste da captura real no Windows:** a fazer.
+| Item | Resultado |
+|------|-----------|
+| Borda amarela | `border: asked to hide (access allowed)`: a permissão foi concedida sem diálogo e o pedido aceito. **Confirmado pelo mantenedor: a borda sumiu de verdade** (monitor e janela) |
+| Cursor | Ajuste aceito |
+| Causa dos 0 quadros no primeiro teste | O remontador de quadros do receptor (`SampleBuilder`) estava limitado a 64 pacotes, cerca de 77 KB. Os quadros-chave de 1080p de uma tela real têm de 98 a 131 KB (cerca de 100 a 110 pacotes) e eram descartados, então o decodificador nunca recebia um quadro-chave. Com o limite em 1024 pacotes, o Mac decodificou 183 quadros sem nenhum erro do decodificador. Em loopback sintético eu não reproduzia porque os quadros-chave sintéticos são bem menores |
+| Quadros por segundo | cerca de 8: o encoder por software não dá conta de 1080p30 neste PC (gerou 265 quadros em 30 s e pulou 41) |
+| Latência de ida e volta | p50 266 ms, p95 520 ms, máximo 747 ms (inclui o encode lento por software) |
+
+Moral para o desenho: o receptor precisa de um remontador que aceite quadros-chave grandes (uma tela de alta resolução parada gera quadros-chave de mais de 100 KB), e o diagnóstico `rx path:` fica no spike por ser o que localizou o problema.
+
+**Pendente:** o pedido de quadro-chave pelo espectador (PLI). O `webrtc` não entrega o PLI ao transmissor por uma chamada simples; o exemplo oficial usa um interceptor próprio. Por enquanto o transmissor manda um quadro-chave de segurança a cada 5 s (`--keyframe-seconds`). **Teste com NVENC e captura real no Windows:** a fazer (precisa do FFmpeg no Windows, seção 2.7).
 
 **Para compilar no Windows (uma vez):**
 1. Baixar a build **LGPL compartilhada** do FFmpeg 9.0 para Windows (BtbN, `ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`), extrair em `C:\ffmpeg` e definir `FFMPEG_DIR=C:\ffmpeg` e `C:\ffmpeg\bin` no `PATH`.
