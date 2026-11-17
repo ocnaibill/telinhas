@@ -6,6 +6,9 @@
 
 use std::fmt;
 
+mod pacer;
+pub use pacer::Pacer;
+
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
@@ -120,8 +123,9 @@ pub struct Options {
     pub cursor: bool,
     /// Leave the system's capture border on (the yellow outline).
     pub border: bool,
-    /// Ask the system to deliver at most this many frames per second.
-    /// `None` leaves it at the source's own rate.
+    /// Deliver about this many frames per second, picked at an even rhythm
+    /// from a capture running at the monitor's full rate (see [`Pacer`]).
+    /// `None` delivers every frame the system produces.
     pub max_fps: Option<u32>,
 }
 
@@ -169,6 +173,11 @@ impl Session {
     /// What happened when the capture border was asked to go away, in words.
     pub fn border_status(&self) -> String {
         self.inner.border_status()
+    }
+
+    /// How many frames the pacer left out so far.
+    pub fn frames_paced_out(&self) -> u64 {
+        self.inner.frames_paced_out()
     }
 
     /// What happened when a frame rate cap was asked for, in words.

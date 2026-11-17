@@ -7,6 +7,7 @@
 
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -58,7 +59,8 @@ use windows::core::{BOOL, HSTRING, PCWSTR, PWSTR};
 use windows::core::{IInspectable, Interface};
 
 use crate::{
-    CaptureSupport, Error, FrameRef, Gpu, GpuVendor, Monitor, Options, Result, Source, Window,
+    CaptureSupport, Error, FrameRef, Gpu, GpuVendor, Monitor, Options, Pacer, Result, Source,
+    Window,
 };
 
 impl From<windows::core::Error> for Error {
@@ -339,6 +341,8 @@ struct Pipeline {
     size: SizeInt32,
     staging: Option<(ID3D11Texture2D, u32, u32)>,
     on_frame: FrameCallback,
+    pacer: Option<Pacer>,
+    paced_out: Arc<AtomicU64>,
 }
 
 // The D3D11 objects are free-threaded, and the mutex around `Pipeline` makes
@@ -354,6 +358,17 @@ impl Pipeline {
             // skip this frame, which still has the old size.
             pool.Recreate(&self.device, PIXEL_FORMAT, BUFFERS, content)?;
             self.size = content;
+            return Ok(());
+        }
+
+        // Decide before touching the GPU: a frame the pacer leaves out costs
+        // almost nothing.
+        let system_micros = frame.SystemRelativeTime()?.Duration / 10;
+        if let Some(pacer) = &mut self.pacer
+            && !pacer.accept(system_micros)
+        {
+            self.paced_out.fetch_add(1, Ordering::Relaxed);
+            let _ = frame.Close();
             return Ok(());
         }
 
@@ -396,7 +411,6 @@ impl Pipeline {
         unsafe { self.context.CopyResource(staging, &texture) };
         // The copy is queued on the GPU, so the frame can go back to the pool
         // now instead of after the (slow) readback below.
-        let system_micros = frame.SystemRelativeTime()?.Duration / 10;
         let _ = frame.Close();
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         unsafe {
@@ -426,6 +440,7 @@ pub struct Session {
     size: (u32, u32),
     border_status: String,
     max_fps_status: String,
+    paced_out: Arc<AtomicU64>,
     cursor_applied: bool,
     _pipeline: Arc<Mutex<Pipeline>>,
 }
@@ -441,6 +456,10 @@ impl Session {
 
     pub fn max_fps_status(&self) -> String {
         self.max_fps_status.clone()
+    }
+
+    pub fn frames_paced_out(&self) -> u64 {
+        self.paced_out.load(Ordering::Relaxed)
     }
 
     pub fn cursor_applied(&self) -> bool {
@@ -531,20 +550,22 @@ pub fn start(source: Source, options: Options, on_frame: FrameCallback) -> Resul
         turn_border_off(&session)
     };
 
-    let max_fps_status = match options.max_fps {
-        None => "no cap (source rate)".to_owned(),
-        Some(fps) if fps > 0 => {
-            // Windows 11 22H2 and later: the least time between two frames.
-            let interval = TimeSpan {
-                Duration: 10_000_000 / i64::from(fps),
-            };
-            match session.SetMinUpdateInterval(interval) {
-                Ok(()) => format!("asked for at most {fps} fps"),
-                Err(error) => format!("could not set a {fps} fps cap: {error}"),
-            }
-        }
-        Some(_) => "ignored a cap of 0".to_owned(),
+    // Always ask for the monitor's full rate: left alone, Windows behaves as
+    // if capped near 60 fps and rounds any interval up to whole refreshes.
+    // A smaller rate is chosen in software by the pacer instead.
+    let full_rate = TimeSpan { Duration: 10_000 }; // 1 ms
+    let full_rate_note = match session.SetMinUpdateInterval(full_rate) {
+        Ok(()) => "capturing at the full source rate".to_owned(),
+        Err(error) => format!("could not ask for the full rate ({error}), expect up to 60 fps"),
     };
+    let (pacer, max_fps_status) = match options.max_fps {
+        Some(fps) if fps > 0 => (
+            Some(Pacer::new(fps)),
+            format!("{full_rate_note}; picking about {fps} fps in software"),
+        ),
+        _ => (None, full_rate_note),
+    };
+    let paced_out = Arc::new(AtomicU64::new(0));
 
     let pipeline = Arc::new(Mutex::new(Pipeline {
         context,
@@ -552,6 +573,8 @@ pub fn start(source: Source, options: Options, on_frame: FrameCallback) -> Resul
         size,
         staging: None,
         on_frame,
+        pacer,
+        paced_out: Arc::clone(&paced_out),
     }));
     let handler_pipeline = Arc::clone(&pipeline);
     pool.FrameArrived(
@@ -574,6 +597,7 @@ pub fn start(source: Source, options: Options, on_frame: FrameCallback) -> Resul
         size: (size.Width.max(0) as u32, size.Height.max(0) as u32),
         border_status,
         max_fps_status,
+        paced_out,
         cursor_applied,
         _pipeline: pipeline,
     })

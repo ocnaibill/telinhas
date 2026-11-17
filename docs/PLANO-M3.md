@@ -70,6 +70,20 @@ Quatro rodadas de 10 s, duas com a tela parada e depois com uma janela sendo arr
 
 Mudanças feitas depois dessas medições: o pool passou de 2 para 4 buffers e o quadro é devolvido ao pool logo depois de enfileirar a cópia, em vez de depois da leitura.
 
+### Segunda rodada de captura (movimento constante, TestUFO em tela cheia)
+
+| Pedido ao Windows | Intervalo | fps |
+|-------------------|-----------|-----|
+| `--max-fps 144` | 6,9 ms | 142,6 |
+| `--max-fps 72` | 13,9 ms | 71,7 |
+| `--max-fps 60` | 20,8 ms | **48,0** |
+| `--max-fps 30` | 34,7 ms | 27,7 |
+| sem pedido | 20,8 ms | cerca de 48 |
+
+**Conclusão:** o Windows Graphics Capture entrega só em múltiplos do vsync e **arredonda o intervalo mínimo para cima**: num monitor de 144 Hz, 60 fps viram 48 (3 atualizações), e sem pedido nenhum ele se comporta como um teto perto de 60. O app, então, pede sempre a taxa cheia do monitor e escolhe os quadros em software (`Pacer`, em `capture/src/pacer.rs`), o que dá 60 fps de verdade com intervalos de 13,9 ou 20,8 ms. Os testes unitários do `Pacer` cobrem 144→60, 144→30, 72→60, 60→60 e uma fonte mais lenta que o alvo. Quadros descartados pelo pacer não passam pela cópia da GPU.
+
+A medição varia com o que está na tela, porque o Windows só entrega quadro quando a imagem muda. Para medir fps é preciso conteúdo em movimento constante.
+
 ## 3. Passos
 
 Cada passo termina com algo que você roda e me devolve.

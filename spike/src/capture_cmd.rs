@@ -153,6 +153,7 @@ pub fn run(
         last_tick = now;
         last_cpu = cpu_now;
     }
+    let paced_out = session.frames_paced_out();
     session.stop();
 
     let wall = started.elapsed().as_secs_f64();
@@ -171,5 +172,11 @@ pub fn run(
         percentile(&mut copies, 0.95),
         cpu / wall * 100.0,
     );
+    if max_fps.is_some() {
+        println!(
+            "pacer left out {paced_out} of {} frames the system produced",
+            frames + paced_out
+        );
+    }
     Ok(())
 }

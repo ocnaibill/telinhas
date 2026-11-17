@@ -31,6 +31,10 @@ impl Session {
         String::new()
     }
 
+    pub fn frames_paced_out(&self) -> u64 {
+        0
+    }
+
     pub fn max_fps_status(&self) -> String {
         String::new()
     }
