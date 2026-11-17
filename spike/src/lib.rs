@@ -5,6 +5,7 @@
 
 pub mod capture_cmd;
 pub mod encode_cmd;
+pub mod frames;
 pub mod link;
 pub mod measure;
 pub mod media;

@@ -148,6 +148,22 @@ O padrão do backend é a troca no lugar. O teto novo leva alguns segundos para 
 
 O restante do M3c, no Windows: confirmar o mesmo NVENC com a captura real.
 
+## 2.8 Estado do M3d (captura e encoder no envio pelo `webrtc`)
+
+`spike send` agora aceita `--source monitor:N|window:TEXT` (ou `synthetic`), `--backend auto|hardware|software`, `--quality`, `--max-kbps`, `--no-cursor`, **`--no-border`**, `--keyframe-seconds` e `--headroom`. O transmissor roda a ritmo fixo, repete o último quadro quando a tela não muda, escolhe o teto do encoder a partir da estimativa do GCC (com histerese de 25% e no mínimo 3 s entre trocas), reabre o encoder se a fonte mudar de tamanho (janela redimensionada) e cai para o software, com aviso, se o hardware falhar. Para o receptor medir a latência numa tela real, o transmissor pinta o contador de quadros e o relógio nos 8 pixels de cima da imagem enviada.
+
+**Achado (loopback no WSL, NVENC, 720p30):** o NVENC passa do teto que se pede (média de 1,4 a 2,1 Mbps com teto de 1,2 Mbps), e o que passa da estimativa do GCC fica na fila do pacer como latência:
+
+| Teto como parte da estimativa | Latência p50 | p95 |
+|--------------------------------|--------------|-----|
+| 0,8 | 383 ms | 730 ms |
+| 0,5 | 107 ms | 383 ms |
+| 0,3 | 106 ms | 305 ms |
+
+O padrão passou a ser **0,5 para hardware** e 0,8 para software (que respeita o teto com rigor). O software em loopback fica em cerca de 50 ms.
+
+**Pendente:** o pedido de quadro-chave pelo espectador (PLI). O `webrtc` não entrega o PLI ao transmissor por uma chamada simples; o exemplo oficial usa um interceptor próprio. Por enquanto o transmissor manda um quadro-chave de segurança a cada 5 s (`--keyframe-seconds`). **Teste da captura real no Windows:** a fazer.
+
 **Para compilar no Windows (uma vez):**
 1. Baixar a build **LGPL compartilhada** do FFmpeg 9.0 para Windows (BtbN, `ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`), extrair em `C:\ffmpeg` e definir `FFMPEG_DIR=C:\ffmpeg` e `C:\ffmpeg\bin` no `PATH`.
 2. Instalar o LLVM: `winget install LLVM.LLVM` e definir `LIBCLANG_PATH` para a pasta `bin` dele.

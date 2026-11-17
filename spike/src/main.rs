@@ -41,6 +41,29 @@ enum Command {
         /// Encoder ceiling, in kbps.
         #[arg(long, default_value_t = 4000)]
         max_kbps: u32,
+        /// What to send: `synthetic` (default), `monitor:N`, `window:HANDLE`
+        /// or `window:TEXT` (title or program name).
+        #[arg(long, default_value = "synthetic")]
+        source: String,
+        /// `auto` (hardware, falling back to software), `hardware` or `software`.
+        #[arg(long, default_value = "auto")]
+        backend: String,
+        /// Constant quality, lower is better.
+        #[arg(long, default_value_t = 23)]
+        quality: u32,
+        /// Seconds between safety keyframes.
+        #[arg(long, default_value_t = 5)]
+        keyframe_seconds: u64,
+        /// Leave the mouse cursor out of the picture.
+        #[arg(long)]
+        no_cursor: bool,
+        /// Ask Windows to hide the yellow capture border.
+        #[arg(long)]
+        no_border: bool,
+        /// Encoder ceiling as a share of the congestion estimate (default:
+        /// 0.5 for hardware, 0.8 for software).
+        #[arg(long)]
+        headroom: Option<f64>,
         /// 0 to 5: how noisy the picture is. Higher needs more bandwidth.
         #[arg(long, default_value_t = 3)]
         noise: u8,
@@ -180,15 +203,28 @@ async fn main() -> Result<()> {
             height,
             fps,
             max_kbps,
+            source,
+            backend,
+            quality,
+            keyframe_seconds,
+            no_cursor,
+            no_border,
+            headroom,
             noise,
         } => {
             let cfg = StreamConfig {
+                source,
                 width,
                 height,
                 fps,
                 max_bps: max_kbps * 1000,
+                quality,
+                backend,
+                keyframe_every: Duration::from_secs(keyframe_seconds),
                 noise_level: noise,
-                ..StreamConfig::default()
+                cursor: !no_cursor,
+                border: !no_border,
+                headroom,
             };
             send(&room, cfg).await
         }

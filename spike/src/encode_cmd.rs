@@ -3,14 +3,12 @@
 //! bitrate ceiling following congestion control, keyframes on demand, the time
 //! each frame takes, and the software fallback (M3c in `docs/PLANO-M3.md`).
 
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use telinhas_capture::{self as capture, Options as CaptureOptions};
 use telinhas_codec::{Backend, Format, Frame, Options, Rate};
 
-use crate::capture_cmd::parse_source;
+use crate::frames::{FrameSource, FrameSpec};
 
 pub struct Args {
     /// `synthetic`, `monitor:N` or `window:TEXT`.
@@ -30,13 +28,6 @@ pub struct Args {
     pub keyframe_at: Option<u64>,
 }
 
-#[derive(Default)]
-struct Latest {
-    width: u32,
-    height: u32,
-    bgra: Vec<u8>,
-}
-
 fn percentile(values: &[f64], q: f64) -> f64 {
     if values.is_empty() {
         return 0.0;
@@ -46,41 +37,7 @@ fn percentile(values: &[f64], q: f64) -> f64 {
     sorted[((sorted.len() - 1) as f64 * q).round() as usize]
 }
 
-/// A moving gradient and square, with optional noise, as BGRA.
-fn synthetic(width: u32, height: u32, index: u64, noise: u8, rng: &mut u32, out: &mut Vec<u8>) {
-    let (w, h) = (width as usize, height as usize);
-    out.clear();
-    out.resize(w * h * 4, 255);
-    let mask: u8 = if noise == 0 {
-        0
-    } else {
-        (1u8 << noise.min(7)) - 1
-    };
-    let t = index as usize;
-    let side = h / 6;
-    let (sx, sy) = ((t * 7) % (w - side), h / 3 + (t * 3) % (h / 3));
-    for y in 0..h {
-        for x in 0..w {
-            let mut v = 48 + (((x + y / 2 + t * 3) / 4) % 64) as u8 * 2;
-            if x >= sx && x < sx + side && y >= sy && y < sy + side {
-                v = 235;
-            }
-            if mask != 0 {
-                *rng ^= *rng << 13;
-                *rng ^= *rng >> 17;
-                *rng ^= *rng << 5;
-                v = v.saturating_add((*rng as u8) & mask);
-            }
-            let at = (y * w + x) * 4;
-            out[at] = v;
-            out[at + 1] = v;
-            out[at + 2] = v;
-        }
-    }
-}
-
 pub fn run(args: &Args) -> Result<()> {
-    capture::init_dpi_awareness();
     let backend = match args.backend.as_str() {
         "auto" => Backend::Auto,
         "hardware" => Backend::Hardware,
@@ -97,42 +54,16 @@ pub fn run(args: &Args) -> Result<()> {
         .transpose()?;
 
     // The source of pictures: the live screen, or a generated one.
-    let latest = Arc::new(Mutex::new(Latest::default()));
-    let mut session = None;
-    let (width, height) = if args.source == "synthetic" {
-        (args.width, args.height)
-    } else {
-        let source = parse_source(&args.source)?;
-        let handler_latest = Arc::clone(&latest);
-        let started = capture::start(
-            source,
-            CaptureOptions {
-                cursor: true,
-                border: true,
-                max_fps: Some(args.fps),
-            },
-            move |frame| {
-                let mut latest = handler_latest.lock().unwrap();
-                latest.width = frame.width;
-                latest.height = frame.height;
-                latest.bgra.clear();
-                let row = frame.width as usize * 4;
-                for line in frame.bgra.chunks(frame.stride).take(frame.height as usize) {
-                    latest.bgra.extend_from_slice(&line[..row]);
-                }
-            },
-        )?;
-        let size = started.size();
-        session = Some(started);
-        let waited = Instant::now();
-        while latest.lock().unwrap().bgra.is_empty() {
-            if waited.elapsed() > Duration::from_secs(5) {
-                bail!("no frame arrived in 5 s");
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        size
-    };
+    let mut frames = FrameSource::open(&FrameSpec {
+        source: args.source.clone(),
+        fps: args.fps,
+        width: args.width,
+        height: args.height,
+        noise: args.noise,
+        cursor: true,
+        border: true,
+    })?;
+    let (width, height) = frames.size();
 
     let options = Options {
         format: Format {
@@ -169,7 +100,6 @@ pub fn run(args: &Args) -> Result<()> {
     let started = Instant::now();
     let mut next = started;
     let mut index = 0u64;
-    let mut rng = 0x9E37_79B9u32;
     let mut picture = Vec::new();
 
     let mut second_bytes = 0u64;
@@ -207,28 +137,15 @@ pub fn run(args: &Args) -> Result<()> {
             event_note.push_str(" [keyframe requested]");
         }
 
-        let encode_started;
-        let packets = if args.source == "synthetic" {
-            synthetic(width, height, index, args.noise, &mut rng, &mut picture);
-            let frame = Frame {
-                width,
-                height,
-                stride: width as usize * 4,
-                bgra: &picture,
-            };
-            encode_started = Instant::now();
-            encoder.encode(&frame)?
-        } else {
-            let latest = latest.lock().unwrap();
-            let frame = Frame {
-                width: latest.width,
-                height: latest.height,
-                stride: latest.width as usize * 4,
-                bgra: &latest.bgra,
-            };
-            encode_started = Instant::now();
-            encoder.encode(&frame)?
+        let (w, h) = frames.fill(index, &mut picture);
+        let frame = Frame {
+            width: w,
+            height: h,
+            stride: w as usize * 4,
+            bgra: &picture,
         };
+        let encode_started = Instant::now();
+        let packets = encoder.encode(&frame)?;
         let took = encode_started.elapsed().as_secs_f64() * 1000.0;
         second_encode_ms.push(took);
         all_encode_ms.push(took);
@@ -267,9 +184,7 @@ pub fn run(args: &Args) -> Result<()> {
             next = now;
         }
     }
-    if let Some(session) = session {
-        session.stop();
-    }
+    frames.stop();
 
     let steady = if per_second_kbps.len() > 3 {
         &per_second_kbps[2..]
