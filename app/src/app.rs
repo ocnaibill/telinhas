@@ -69,11 +69,17 @@ impl TelinhasApp {
                 .callback_resources
                 .insert(VideoGpu::new(&state.device, state.target_format));
         }
-        let nickname = cc
-            .storage
-            .and_then(|s| s.get_string(NICKNAME_KEY))
-            .filter(|n| valid_nickname(n))
-            .unwrap_or_default();
+        // `--first-run` shows the nickname screen again without touching what
+        // is saved: the saved nickname only changes when a new one is confirmed.
+        let force_first_run = std::env::args().any(|a| a == "--first-run");
+        let nickname = if force_first_run {
+            String::new()
+        } else {
+            cc.storage
+                .and_then(|s| s.get_string(NICKNAME_KEY))
+                .filter(|n| valid_nickname(n))
+                .unwrap_or_default()
+        };
         Self::build(nickname, Sources::load())
     }
 
