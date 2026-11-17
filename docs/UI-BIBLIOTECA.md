@@ -78,3 +78,11 @@ Se o spike passar, o M4 segue com o egui. Se falhar, eu volto com os números e 
 - Importação de textura wgpu na Slint: <https://docs.slint.dev/latest/docs/rust/slint/wgpu_28> e <https://git.joshthomas.dev/language-servers/slint/src/branch/master/examples/wgpu_texture/README.md>
 - `iced_video_player`: <https://github.com/jazzfool/iced_video_player> e <https://lib.rs/crates/iced_video_player>
 - Gancho de pintura personalizada do egui: <https://docs.rs/egui-wgpu/latest/egui_wgpu/trait.CallbackTrait.html>
+
+## 8. Spike M4a: estado
+
+`ui-spike/` (`telinhas-ui-spike`): janela `eframe` com wgpu, N cartões de vídeo (grade dinâmica) alimentados por quadros I420 em 1080p60 gerados por threads, cada um enviado à GPU como três texturas (`R8Unorm`) e convertido para RGB por um shader dentro de um `CallbackTrait` do `egui_wgpu`, com cantos arredondados no próprio shader. Sobre o vídeo: selo "AO VIVO", plaqueta com avatar e nome, borda verde, webcam em picture-in-picture, barra flutuante de controles e painel lateral com volume, como na tela "sala ao vivo". Mede fps da interface, tempo por quadro (p50, p95, p99, máximo), CPU e MB/s enviados à GPU.
+
+**Compilou na primeira com o egui 0.37 e o wgpu 30** e rodou no WSLg (software, `lavapipe`), o que confirma que o caminho de pintura personalizada funciona. Os números do WSLg **não valem**: sem GPU de verdade a rasterização é por software (CPU em 400%). A medição que importa é no Windows, com a GPU.
+
+Opções: `--tiles N`, `--width`, `--height`, `--fps`, `--seconds`, `--static-frames` (isola o custo da interface do custo do vídeo), `--no-vsync`, `--no-webcam`.

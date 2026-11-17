@@ -1,0 +1,16 @@
+[package]
+name = "telinhas-ui-spike"
+description = "M4a spike: several live video tiles in an egui window, to measure the UI path"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "wayland", "x11"] }
+telinhas-capture = { version = "0.0.0", path = "../capture" }

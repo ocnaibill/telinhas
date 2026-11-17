@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["app", "capture", "codec", "signaling", "spike"]
+members = ["app", "capture", "codec", "signaling", "spike", "ui-spike"]
 
 [workspace.package]
 version = "0.0.0"
@@ -20,4 +20,6 @@ opt-level = 3
 [profile.dev.package.openh264]
 opt-level = 3
 [profile.dev.package.telinhas-spike]
+opt-level = 3
+[profile.dev.package.telinhas-ui-spike]
 opt-level = 3
