@@ -35,6 +35,10 @@ pub(crate) struct HomeState {
     pub mode: EntryMode,
     pub require_approval: bool,
     pub preview_code: String,
+    /// Height both cards share: the taller one's, measured on the last frame.
+    pub card_height: f32,
+    /// What each card measured this frame, [create, join].
+    pub measured: [f32; 2],
 }
 
 pub struct TelinhasApp {
@@ -88,6 +92,8 @@ impl TelinhasApp {
                 mode: EntryMode::Watching,
                 require_approval: false,
                 preview_code: preview_code(seed),
+                card_height: 0.0,
+                measured: [0.0; 2],
             },
             room: None,
             sources,
@@ -233,7 +239,14 @@ mod tests {
     fn home_and_nickname_modal_draw() {
         let mut app = app("Bianco");
         assert_eq!(app.screen, Screen::Home);
-        frames(&mut app, 3);
+        frames(&mut app, 4);
+        // The two cards are as tall as the taller one.
+        let [create, join] = app.home.measured;
+        assert!(create > 100.0 && join > 100.0);
+        assert!(
+            (create - join).abs() < 0.5,
+            "create {create} px, join {join} px"
+        );
         app.modal = Modal::Nickname;
         frames(&mut app, 3);
     }

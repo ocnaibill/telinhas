@@ -54,14 +54,17 @@ impl TelinhasApp {
                         self.create_card(&mut columns[0]);
                         self.join_card(&mut columns[1]);
                     });
+                    // Both cards take the height of the taller one next frame.
+                    self.home.card_height = self.home.measured[0].max(self.home.measured[1]);
                 });
             });
         });
     }
 
     fn create_card(&mut self, ui: &mut egui::Ui) {
-        theme::card().show(ui, |ui| {
-            ui.set_min_height(300.0);
+        let min_height = (self.home.card_height - 32.0).max(0.0);
+        let shown = theme::card().show(ui, |ui| {
+            ui.set_min_height(min_height);
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(theme::icons::PLUS)
@@ -92,7 +95,7 @@ impl TelinhasApp {
                             .color(theme::TEXT_FAINT),
                     );
                 });
-            ui.add_space(4.0);
+            ui.add_space(16.0);
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(RichText::new("Exigir aprovação para entrar").strong());
@@ -106,23 +109,27 @@ impl TelinhasApp {
                     theme::toggle(ui, &mut self.home.require_approval);
                 });
             });
-            ui.add_space(8.0);
-            if theme::wide_primary_button(
-                ui,
-                format!("{}  Criar sala", theme::icons::LIGHTNING),
-                ui.available_width(),
-            )
-            .clicked()
-            {
-                let code = self.home.preview_code.clone();
-                self.enter_room(&code, true);
-            }
+            // The button sits at the bottom of the card, level with the other card's.
+            ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
+                if theme::wide_primary_button(
+                    ui,
+                    format!("{}  Criar sala", theme::icons::LIGHTNING),
+                    ui.available_width(),
+                )
+                .clicked()
+                {
+                    let code = self.home.preview_code.clone();
+                    self.enter_room(&code, true);
+                }
+            });
         });
+        self.home.measured[0] = shown.response.rect.height();
     }
 
     fn join_card(&mut self, ui: &mut egui::Ui) {
-        theme::card().show(ui, |ui| {
-            ui.set_min_height(300.0);
+        let min_height = (self.home.card_height - 32.0).max(0.0);
+        let shown = theme::card().show(ui, |ui| {
+            ui.set_min_height(min_height);
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(theme::icons::SIGN_IN)
@@ -178,25 +185,27 @@ impl TelinhasApp {
                     self.home.mode = mode;
                 }
             }
-            ui.add_space(6.0);
             let ready = looks_like_code(&self.home.join_code);
-            let enter = ui
-                .add_enabled_ui(ready, |ui| {
-                    theme::success_button(
-                        ui,
-                        format!("{}  Entrar na sala", theme::icons::BROADCAST),
-                        ui.available_width(),
-                    )
-                })
-                .inner
-                .clicked()
-                || (response.lost_focus()
-                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                    && ready);
+            let mut enter =
+                response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && ready;
+            // The button sits at the bottom of the card, level with the other card's.
+            ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
+                enter |= ui
+                    .add_enabled_ui(ready, |ui| {
+                        theme::success_button(
+                            ui,
+                            format!("{}  Entrar na sala", theme::icons::BROADCAST),
+                            ui.available_width(),
+                        )
+                    })
+                    .inner
+                    .clicked();
+            });
             if enter && ready {
                 let code = self.home.join_code.to_uppercase();
                 self.enter_room(&code, false);
             }
         });
+        self.home.measured[1] = shown.response.rect.height();
     }
 }
