@@ -380,18 +380,20 @@ impl TelinhasApp {
             });
 
         ui.add_space(8.0);
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let label = if already {
-                format!("{}  Trocar fonte e aplicar", theme::icons::BROADCAST)
-            } else {
-                format!("{}  Iniciar transmissão", theme::icons::BROADCAST)
-            };
-            if theme::wide_primary_button(ui, label, 220.0).clicked() {
-                outcome = Outcome::Start;
-            }
-            if theme::secondary_button(ui, "Cancelar").clicked() {
-                outcome = Outcome::Cancel;
-            }
+        ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let label = if already {
+                    format!("{}  Trocar fonte e aplicar", theme::icons::BROADCAST)
+                } else {
+                    format!("{}  Iniciar transmissão", theme::icons::BROADCAST)
+                };
+                if theme::wide_primary_button(ui, label, 220.0).clicked() {
+                    outcome = Outcome::Start;
+                }
+                if theme::secondary_button(ui, "Cancelar").clicked() {
+                    outcome = Outcome::Cancel;
+                }
+            })
         });
         outcome
     }

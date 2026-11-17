@@ -12,4 +12,6 @@ workspace = true
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "wayland", "x11", "persistence"] }
 egui-phosphor = "0.14"
+egui_extras = { version = "0.37", default-features = false, features = ["svg"] }
+resvg = "0.45"
 telinhas-capture = { path = "../capture" }

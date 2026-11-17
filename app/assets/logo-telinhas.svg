@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Camada_2" data-name="Camada 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1956.77 1443.06">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+
+      .cls-2 {
+        fill: none;
+      }
+
+      .cls-3 {
+        clip-path: url(#clippath);
+      }
+    </style>
+    <clipPath id="clippath">
+      <rect class="cls-2" x="133.79" y="137.87" width="1627.91" height="925.28" rx="400.34" ry="400.34"/>
+    </clipPath>
+  </defs>
+  <g id="Camada_1-2" data-name="Camada 1">
+    <path d="M1614.13,91.75C1521.67,33.62,1412.25,0,1294.98,0h-694.47C268.86,0,0,268.86,0,600.51h0c0,239.35,140.03,445.98,342.64,542.47,92.46,58.12,201.88,91.75,319.15,91.75h694.47c331.65,0,600.51-268.86,600.51-600.51h0c0-239.35-140.03-445.98-342.64-542.47Z"/>
+    <path d="M1550.3,1265.36H406.47c-49.07,0-88.85,39.78-88.85,88.85h0c0,49.07,39.78,88.85,88.85,88.85h1143.83c49.07,0,88.85-39.78,88.85-88.85h0c0-49.07-39.78-88.85-88.85-88.85Z"/>
+    <g class="cls-3">
+      <g>
+        <rect class="cls-1" x="-130.25" y="-98.86" width="2156" height="1398.73" rx="149.89" ry="149.89" transform="translate(-52.04 91.34) rotate(-5.37)"/>
+        <rect x="218.84" y="140.53" width="1457.82" height="919.95" rx="149.89" ry="149.89" transform="translate(120.12 -157.03) rotate(10.11)"/>
+        <rect class="cls-1" x="278.14" y="177.96" width="1339.2" height="845.1" rx="149.89" ry="149.89" transform="translate(120.12 -157.03) rotate(10.11)"/>
+        <g>
+          <rect x="370.49" y="242.28" width="1154.52" height="728.55" rx="149.89" ry="149.89" transform="translate(289.22 -305.84) rotate(21.56)"/>
+          <rect class="cls-1" x="417.45" y="271.91" width="1060.58" height="669.28" rx="149.89" ry="149.89" transform="translate(289.22 -305.84) rotate(21.56)"/>
+        </g>
+        <g>
+          <rect x="442.3" y="291.2" width="980.32" height="618.63" rx="149.89" ry="149.89" transform="translate(412.71 -379.26) rotate(29.27)"/>
+          <rect class="cls-1" x="482.18" y="316.36" width="900.56" height="568.29" rx="149.89" ry="149.89" transform="translate(412.71 -379.26) rotate(29.27)"/>
+        </g>
+        <g>
+          <rect x="549.33" y="347.58" width="801.61" height="505.85" rx="149.89" ry="149.89" transform="translate(546.19 -448.39) rotate(36.64)"/>
+          <rect class="cls-1" x="581.94" y="368.16" width="736.39" height="464.7" rx="149.89" ry="149.89" transform="translate(546.19 -448.39) rotate(36.64)"/>
+        </g>
+        <g>
+          <rect x="637.22" y="405.83" width="617.01" height="389.37" rx="149.89" ry="149.89" transform="translate(914.69 -519.33) rotate(56)"/>
+          <rect class="cls-1" x="662.32" y="421.67" width="566.81" height="357.69" rx="149.89" ry="149.89" transform="translate(914.69 -519.33) rotate(56)"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

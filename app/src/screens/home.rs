@@ -3,6 +3,7 @@
 use eframe::egui::{self, Align, Color32, Layout, RichText, Sense, Vec2};
 
 use crate::app::{Modal, TelinhasApp};
+use crate::logo;
 use crate::model::{EntryMode, looks_like_code};
 use crate::theme;
 
@@ -16,12 +17,8 @@ impl TelinhasApp {
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(format!("{}  Telinhas", theme::icons::MONITOR_PLAY))
-                            .size(18.0)
-                            .color(theme::INDIGO)
-                            .strong(),
-                    );
+                    ui.add(logo::image(26.0));
+                    ui.label(RichText::new("Telinhas").size(18.0).strong());
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let chip = format!("{}  {}", theme::icons::USER, self.nickname);
                         if theme::secondary_button(ui, chip)

@@ -176,7 +176,7 @@ mod tests {
 
     /// Runs the interface for a few frames, so layout mistakes panic here
     /// instead of on someone's screen.
-    fn frames(app: &mut TelinhasApp, count: usize) {
+    fn frames(app: &mut TelinhasApp, count: usize) -> egui::Context {
         let ctx = egui::Context::default();
         theme::install(&ctx);
         for _ in 0..count {
@@ -199,6 +199,7 @@ mod tests {
             // Nothing renders in a test, so there is nothing to upload.
             output.textures_delta.clear();
         }
+        ctx
     }
 
     fn app(nickname: &str) -> TelinhasApp {
@@ -209,7 +210,23 @@ mod tests {
     fn first_launch_asks_for_a_nickname() {
         let mut app = app("");
         assert_eq!(app.screen, Screen::FirstRun);
-        frames(&mut app, 3);
+        let ctx = frames(&mut app, 3);
+        // The form is as tall as its content and sits in the middle of the
+        // window, not stretched to fill it.
+        let area = ctx
+            .memory(|m| m.area_rect(theme::id("first_run")))
+            .expect("the form was drawn");
+        assert!(area.height() < 460.0, "form is {} px tall", area.height());
+        assert!(
+            (area.center().y - 410.0).abs() < 4.0,
+            "centered at {}",
+            area.center().y
+        );
+        assert!(
+            (area.center().x - 680.0).abs() < 4.0,
+            "centered at {}",
+            area.center().x
+        );
     }
 
     #[test]

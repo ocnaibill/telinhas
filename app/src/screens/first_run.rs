@@ -1,28 +1,37 @@
 //! First launch: the person picks a nickname (DEC-14, RF-15).
 
-use eframe::egui::{self, Align, Color32, Layout, RichText, Vec2};
+use eframe::egui::{self, Align, Align2, Color32, Layout, RichText, Vec2};
 
 use crate::app::TelinhasApp;
+use crate::logo;
 use crate::model::{Screen, valid_nickname};
 use crate::theme;
 
 impl TelinhasApp {
     pub(crate) fn first_run_ui(&mut self, ui: &mut egui::Ui) {
-        egui::CentralPanel::default().show(ui, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space((ui.available_height() * 0.22).max(40.0));
-                ui.label(
-                    RichText::new(format!("{}  Telinhas", theme::icons::MONITOR_PLAY))
-                        .size(22.0)
-                        .color(theme::INDIGO)
-                        .strong(),
-                );
+        let ctx = ui.ctx().clone();
+        egui::CentralPanel::default().show(ui, |_| {});
+        let mut done = false;
+        egui::Area::new(theme::id("first_run"))
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(&ctx, |ui| {
+                ui.set_width(420.0);
+                ui.vertical_centered(|ui| {
+                    ui.add(logo::image(86.0));
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new("Telinhas")
+                            .size(22.0)
+                            .color(theme::TEXT)
+                            .strong(),
+                    );
+                });
                 ui.add_space(18.0);
-                if self.nickname_card(ui, "Como devemos te chamar?", "Continuar") {
-                    self.screen = Screen::Home;
-                }
+                done = self.nickname_card(ui, "Como devemos te chamar?", "Continuar");
             });
-        });
+        if done {
+            self.screen = Screen::Home;
+        }
     }
 
     /// The nickname form, used at first launch and when changing it later.
@@ -47,7 +56,7 @@ impl TelinhasApp {
                 .response;
             let valid = valid_nickname(&self.nick_draft);
             ui.add_space(12.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.horizontal(|ui| ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let button = ui.add_enabled_ui(valid, |ui| {
                     theme::wide_primary_button(ui, confirm, 140.0)
                 });
@@ -67,7 +76,7 @@ impl TelinhasApp {
                             .color(Color32::from_rgb(245, 158, 11)),
                     );
                 }
-            });
+            }));
         });
         done
     }

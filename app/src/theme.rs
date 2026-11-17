@@ -34,6 +34,7 @@ pub fn id(name: &str) -> egui::Id {
 
 /// Sets visuals, fonts (with the icon font as a fallback) and spacing.
 pub fn install(ctx: &egui::Context) {
+    egui_extras::install_image_loaders(ctx);
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
         "phosphor".to_owned(),
