@@ -1,23 +1,27 @@
 //! The task that owns every connection and answers the application's commands.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use webrtc::data_channel::DataChannelEvent;
 
 use telinhas_protocol::{PeerId, SignalKind, Value};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
 
-use crate::link::{LinkConfig, RecvLink, SendLink, spawn_decoder};
+use crate::link::{LinkConfig, RecvLink, SendLink, decoder_channels, spawn_decoder};
 use crate::send::{BroadcastSpec, Encoded, Targets, spawn_broadcast};
+use crate::stats::{Path, Stats, smooth};
 use crate::{Command, Event, EventSender, Latest};
 
 pub(crate) struct Shared {
     pub link: LinkConfig,
     pub events: EventSender,
     pub latest: Latest,
+    pub stats: Arc<Mutex<Stats>>,
     pub wake: Arc<dyn Fn() + Send + Sync>,
 }
 
@@ -60,17 +64,17 @@ pub(crate) async fn run(shared: Shared, mut inbox: UnboundedReceiver<Command>) {
     while let Some(command) = inbox.recv().await {
         match command {
             Command::StartBroadcast { spec, viewers } => {
-                stop_broadcast(&mut state);
+                stop_broadcast(&shared, &mut state);
                 start_broadcast(&shared, &mut state, spec, viewers);
             }
-            Command::StopBroadcast => stop_broadcast(&mut state),
+            Command::StopBroadcast => stop_broadcast(&shared, &mut state),
             Command::PeerJoined(peer) => {
                 if state.broadcast.is_some() {
                     start_outgoing(&shared, &mut state, peer);
                 }
             }
             Command::PeerLeft(peer) => {
-                drop_outgoing(&mut state, peer);
+                drop_outgoing(&shared, &mut state, peer);
                 drop_incoming(&shared, &mut state, peer);
             }
             Command::StreamEnded(peer) => drop_incoming(&shared, &mut state, peer),
@@ -91,7 +95,7 @@ pub(crate) async fn run(shared: Shared, mut inbox: UnboundedReceiver<Command>) {
             Command::Shutdown => break,
         }
     }
-    stop_broadcast(&mut state);
+    stop_broadcast(&shared, &mut state);
     let peers: Vec<PeerId> = state.incoming.keys().copied().collect();
     for peer in peers {
         drop_incoming(&shared, &mut state, peer);
@@ -114,6 +118,7 @@ fn start_broadcast(
         Arc::clone(&stop),
         Arc::clone(&need_key),
         Arc::clone(&targets),
+        Arc::clone(&shared.stats),
         shared.events.clone(),
         Arc::clone(&shared.wake),
     );
@@ -128,24 +133,27 @@ fn start_broadcast(
     }
 }
 
-fn stop_broadcast(state: &mut State) {
+fn stop_broadcast(shared: &Shared, state: &mut State) {
     if let Some(broadcast) = state.broadcast.take() {
         broadcast.stop.store(true, Ordering::Relaxed);
     }
     state.outgoing.clear();
+    shared.stats.lock().unwrap().viewers.clear();
 }
 
-fn drop_outgoing(state: &mut State, peer: PeerId) {
+fn drop_outgoing(shared: &Shared, state: &mut State, peer: PeerId) {
     if state.outgoing.remove(&peer).is_some()
         && let Some(broadcast) = &state.broadcast
     {
         broadcast.targets.lock().unwrap().remove(&peer);
     }
+    shared.stats.lock().unwrap().viewers.remove(&peer);
 }
 
 fn drop_incoming(shared: &Shared, state: &mut State, peer: PeerId) {
     state.incoming.remove(&peer);
     shared.latest.lock().unwrap().remove(&peer);
+    shared.stats.lock().unwrap().receiving.remove(&peer);
 }
 
 /// Sends the broadcast to one viewer: offer, wait for the answer, then write
@@ -154,7 +162,7 @@ fn start_outgoing(shared: &Arc<Shared>, state: &mut State, peer: PeerId) {
     if state.broadcast.is_none() {
         return;
     }
-    drop_outgoing(state, peer);
+    drop_outgoing(shared, state, peer);
     let Some(broadcast) = &state.broadcast else {
         return;
     };
@@ -212,11 +220,60 @@ async fn drive_outgoing(
         .insert(peer, Arc::clone(&link.estimate));
     // The new viewer needs a picture it can start from.
     need_key.store(true, Ordering::Relaxed);
+    // When each picture was taken and when it was handed to the network, until
+    // the viewer confirms it.
+    let mut sent: HashMap<u32, (Instant, Instant)> = HashMap::new();
+    let mut path = Path::default();
+    let mut open = false;
+    let mut last_feedback = Instant::now();
     loop {
-        match frames.recv().await {
-            Ok(encoded) => link.write(encoded.data.clone(), encoded.duration).await?,
-            Err(RecvError::Lagged(_)) => need_key.store(true, Ordering::Relaxed),
-            Err(RecvError::Closed) => return Ok(()),
+        tokio::select! {
+            frame = frames.recv() => match frame {
+                Ok(encoded) => {
+                    sent.retain(|_, (captured, _)| captured.elapsed() < Duration::from_secs(5));
+                    sent.insert(encoded.counter, (encoded.captured_at, Instant::now()));
+                    link.write(encoded.data.clone(), encoded.duration).await?;
+                }
+                Err(RecvError::Lagged(_)) => need_key.store(true, Ordering::Relaxed),
+                Err(RecvError::Closed) => return Ok(()),
+            },
+            event = link.channel.poll() => match event {
+                Some(DataChannelEvent::OnOpen) => open = true,
+                Some(DataChannelEvent::OnMessage(message)) => {
+                    let text = String::from_utf8_lossy(&message.data).into_owned();
+                    let mut parts = text.split(',');
+                    let counter = parts.next().and_then(|c| c.parse::<u32>().ok());
+                    let held = parts.next().and_then(|h| h.parse::<f32>().ok());
+                    let (Some(counter), Some(held)) = (counter, held) else { continue };
+                    let Some((captured, written)) = sent.remove(&counter) else { continue };
+                    let total = captured.elapsed().as_secs_f32() * 1000.0;
+                    let encode = written.duration_since(captured).as_secs_f32() * 1000.0;
+                    path.total_ms = smooth(path.total_ms, total);
+                    path.encode_ms = smooth(path.encode_ms, encode);
+                    path.viewer_ms = smooth(path.viewer_ms, held);
+                    path.network_ms = smooth(path.network_ms, (total - encode - held).max(0.0));
+                    path.estimate_kbps =
+                        (f64::from_bits(link.estimate.load(Ordering::Relaxed)) / 1000.0) as f32;
+                    shared.stats.lock().unwrap().viewers.insert(peer, path.clone());
+                    // Tell the viewer too, so its screen can show where the time goes.
+                    if open && last_feedback.elapsed() >= Duration::from_millis(500) {
+                        last_feedback = Instant::now();
+                        let _ = link
+                            .channel
+                            .send_text(&format!(
+                                "L,{:.1},{:.1},{:.1},{:.1},{:.0}",
+                                path.total_ms,
+                                path.encode_ms,
+                                path.network_ms,
+                                path.viewer_ms,
+                                path.estimate_kbps
+                            ))
+                            .await;
+                    }
+                }
+                Some(DataChannelEvent::OnClose) | None => return Ok(()),
+                _ => {}
+            },
         }
         if link.failed() {
             return Ok(());
@@ -230,10 +287,10 @@ fn start_incoming(shared: &Arc<Shared>, state: &mut State, peer: PeerId, offer: 
     let (stop_tx, mut stop) = oneshot::channel::<()>();
     let shared = Arc::clone(shared);
     tokio::spawn(async move {
-        let (units_tx, units_rx) = std::sync::mpsc::channel();
+        let (feed, input) = decoder_channels();
         let publisher = Arc::clone(&shared);
         let announced = AtomicBool::new(false);
-        spawn_decoder(units_rx, move |picture| {
+        spawn_decoder(input, peer, Arc::clone(&shared.stats), move |picture| {
             publisher.latest.lock().unwrap().insert(peer, picture);
             if announced.swap(true, Ordering::Relaxed) {
                 (publisher.wake)();
@@ -241,7 +298,8 @@ fn start_incoming(shared: &Arc<Shared>, state: &mut State, peer: PeerId, offer: 
                 publisher.tell(Event::Receiving(peer));
             }
         });
-        let Ok(mut link) = RecvLink::new(&shared.link, units_tx).await else {
+        let Ok(mut link) = RecvLink::new(&shared.link, peer, Arc::clone(&shared.stats), feed).await
+        else {
             return;
         };
         tokio::select! {

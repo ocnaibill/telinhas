@@ -3,13 +3,14 @@
 //! Descriptions are complete: each side waits for ICE gathering to finish
 //! before handing its description over.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::Sender as StdSender;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 use bytes::Bytes;
+use rtc::data_channel::RTCDataChannelInit;
 use rtc::interceptor::{BandwidthEstimator, EstimatorStats, Gcc, PacketReport, Registry};
 use rtc::media::Sample;
 use rtc::media::io::sample_builder::SampleBuilder;
@@ -27,8 +28,10 @@ use rtc::rtp_transceiver::rtp_sender::{
     RtpCodecKind,
 };
 use rtc::rtp_transceiver::{PayloadType, RTCRtpTransceiverDirection, RTCRtpTransceiverInit};
-use telinhas_protocol::Value;
+use telinhas_protocol::{PeerId, Value};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch;
+use webrtc::data_channel::{DataChannel, DataChannelEvent};
 use webrtc::media_stream::Track;
 use webrtc::media_stream::track_local::TrackLocal;
 use webrtc::media_stream::track_local::static_sample::TrackLocalStaticSample;
@@ -41,6 +44,8 @@ use webrtc::rtp_transceiver::RtpSender;
 use webrtc::runtime::{Runtime, default_runtime};
 
 use crate::picture::Picture;
+use crate::stamp;
+use crate::stats::{Stats, smooth};
 
 const H264_FMTP: &str = "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f";
 const H264_PAYLOAD_TYPE: PayloadType = 102;
@@ -118,10 +123,18 @@ impl<E: BandwidthEstimator> BandwidthEstimator for ReportingEstimator<E> {
     }
 }
 
-/// Where a viewer's access units go to be decoded.
+/// An access unit and when it was complete, on its way to the decoder.
+pub(crate) type Unit = (Vec<u8>, Instant);
+
+/// Where a viewer's access units go to be decoded, and how it talks back.
 struct RxContext {
     runtime: Arc<dyn Runtime>,
-    units: StdSender<Vec<u8>>,
+    units: StdSender<Unit>,
+    backlog: Arc<AtomicUsize>,
+    /// Confirmations of shown pictures, to send to the broadcaster.
+    acks: Mutex<Option<UnboundedReceiver<String>>>,
+    stats: Arc<Mutex<Stats>>,
+    peer: PeerId,
 }
 
 struct Handler {
@@ -142,9 +155,46 @@ impl PeerConnectionEventHandler for Handler {
         let _ = self.state.send(state);
     }
 
+    async fn on_data_channel(&self, channel: Arc<dyn DataChannel>) {
+        let Some(rx) = &self.rx else { return };
+        let Some(mut acks) = rx.acks.lock().unwrap().take() else {
+            return;
+        };
+        let stats = Arc::clone(&rx.stats);
+        let peer = rx.peer;
+        rx.runtime.spawn(Box::pin(async move {
+            let mut open = false;
+            loop {
+                tokio::select! {
+                    event = channel.poll() => match event {
+                        Some(DataChannelEvent::OnOpen) => open = true,
+                        Some(DataChannelEvent::OnMessage(message)) => {
+                            // "L,total,encode,network,viewer,estimate" from the broadcaster.
+                            let text = String::from_utf8_lossy(&message.data).into_owned();
+                            if let Some(path) = parse_path(&text)
+                                && let Some(entry) = stats.lock().unwrap().receiving.get_mut(&peer)
+                            {
+                                entry.path = path;
+                            }
+                        }
+                        Some(DataChannelEvent::OnClose) | None => break,
+                        _ => {}
+                    },
+                    ack = acks.recv() => {
+                        let Some(ack) = ack else { break };
+                        if open {
+                            let _ = channel.send_text(&ack).await;
+                        }
+                    }
+                }
+            }
+        }));
+    }
+
     async fn on_track(&self, track: Arc<dyn TrackRemote>) {
         let Some(rx) = &self.rx else { return };
         let units = rx.units.clone();
+        let backlog = Arc::clone(&rx.backlog);
         rx.runtime.spawn(Box::pin(async move {
             // A 1080p keyframe is hundreds of packets: the builder must be
             // willing to wait for all of them before it gives up on a unit.
@@ -155,13 +205,26 @@ impl PeerConnectionEventHandler for Handler {
                 };
                 builder.push(Instant::now(), packet);
                 while let Some(sample) = builder.pop(Instant::now()) {
-                    if units.send(sample.data.to_vec()).is_err() {
+                    backlog.fetch_add(1, Ordering::Relaxed);
+                    if units.send((sample.data.to_vec(), Instant::now())).is_err() {
                         return;
                     }
                 }
             }
         }));
     }
+}
+
+pub(crate) fn parse_path(text: &str) -> Option<crate::stats::Path> {
+    let mut parts = text.strip_prefix("L,")?.split(',');
+    let mut next = || parts.next()?.parse::<f32>().ok();
+    Some(crate::stats::Path {
+        total_ms: next()?,
+        encode_ms: next()?,
+        network_ms: next()?,
+        viewer_ms: next()?,
+        estimate_kbps: next()?,
+    })
 }
 
 fn h264_codec() -> RTCRtpCodecParameters {
@@ -280,6 +343,8 @@ pub(crate) struct SendLink {
     state: watch::Receiver<RTCPeerConnectionState>,
     track: Arc<TrackLocalStaticSample>,
     sender: Arc<dyn RtpSender>,
+    /// Confirmations come back on it, and measurements go out on it.
+    pub channel: Arc<dyn DataChannel>,
     /// The congestion controller's target for this path, in bits per second
     /// (as `f64` bits).
     pub estimate: Arc<AtomicU64>,
@@ -313,12 +378,26 @@ impl SendLink {
             .pc
             .add_track(Arc::clone(&track) as Arc<dyn TrackLocal>)
             .await?;
+        // Confirmations must not wait behind a retransmission: unordered and
+        // unreliable, so a late one never holds back the ones after it.
+        let channel = built
+            .pc
+            .create_data_channel(
+                "acks",
+                Some(RTCDataChannelInit {
+                    ordered: false,
+                    max_retransmits: Some(0),
+                    ..Default::default()
+                }),
+            )
+            .await?;
         Ok(Self {
             pc: built.pc,
             gathered: built.gathered,
             state: built.state,
             track,
             sender,
+            channel,
             estimate,
             writer: None,
         })
@@ -395,11 +474,20 @@ pub(crate) struct RecvLink {
 }
 
 impl RecvLink {
-    pub async fn new(link: &LinkConfig, units: StdSender<Vec<u8>>) -> Result<Self> {
+    pub async fn new(
+        link: &LinkConfig,
+        peer: PeerId,
+        stats: Arc<Mutex<Stats>>,
+        feed: DecoderFeed,
+    ) -> Result<Self> {
         let runtime = default_runtime().context("no runtime")?;
         let rx = RxContext {
             runtime: Arc::clone(&runtime),
-            units,
+            units: feed.units,
+            backlog: feed.backlog,
+            acks: Mutex::new(Some(feed.acks)),
+            stats,
+            peer,
         };
         // The viewer runs the same interceptors so congestion feedback flows
         // back to the broadcaster.
@@ -435,10 +523,44 @@ impl RecvLink {
     }
 }
 
-/// Decodes access units into pictures on its own thread, and publishes the
-/// newest one. Ends when the sender of `units` is dropped.
+/// What the receive path hands to the decoder thread.
+pub(crate) struct DecoderFeed {
+    pub units: StdSender<Unit>,
+    pub backlog: Arc<AtomicUsize>,
+    pub acks: UnboundedReceiver<String>,
+}
+
+/// The decoder thread's side of a `DecoderFeed`.
+pub(crate) struct DecoderInput {
+    pub units: std::sync::mpsc::Receiver<Unit>,
+    pub backlog: Arc<AtomicUsize>,
+    pub acks: UnboundedSender<String>,
+}
+
+pub(crate) fn decoder_channels() -> (DecoderFeed, DecoderInput) {
+    let (units_tx, units_rx) = std::sync::mpsc::channel();
+    let (acks_tx, acks_rx) = tokio::sync::mpsc::unbounded_channel();
+    let backlog = Arc::new(AtomicUsize::new(0));
+    (
+        DecoderFeed {
+            units: units_tx,
+            backlog: Arc::clone(&backlog),
+            acks: acks_rx,
+        },
+        DecoderInput {
+            units: units_rx,
+            backlog,
+            acks: acks_tx,
+        },
+    )
+}
+
+/// Decodes access units into pictures on its own thread, publishes the newest
+/// one and confirms each to the broadcaster. Ends when the feed is dropped.
 pub(crate) fn spawn_decoder(
-    units: std::sync::mpsc::Receiver<Vec<u8>>,
+    input: DecoderInput,
+    peer: PeerId,
+    stats: Arc<Mutex<Stats>>,
     publish: impl Fn(Arc<Picture>) + Send + 'static,
 ) -> std::thread::JoinHandle<()> {
     use openh264::decoder::Decoder;
@@ -448,11 +570,15 @@ pub(crate) fn spawn_decoder(
             return;
         };
         let mut seq = 0u64;
-        while let Ok(data) = units.recv() {
+        let (mut window, mut frames, mut bytes) = (Instant::now(), 0u32, 0usize);
+        while let Ok((data, ready_at)) = input.units.recv() {
+            input.backlog.fetch_sub(1, Ordering::Relaxed);
+            let started = Instant::now();
             // The first units may fail until a keyframe arrives.
             let Ok(Some(yuv)) = decoder.decode(&data) else {
                 continue;
             };
+            let decode_ms = started.elapsed().as_secs_f32() * 1000.0;
             let (width, height) = yuv.dimensions();
             let (ys, us, vs) = yuv.strides();
             let copy = |plane: &[u8], stride: usize, w: usize, h: usize| -> Vec<u8> {
@@ -471,6 +597,25 @@ pub(crate) fn spawn_decoder(
                 u: copy(yuv.u(), us, width / 2, height / 2),
                 v: copy(yuv.v(), vs, width / 2, height / 2),
             }));
+            if let Some(counter) = stamp::read(&data) {
+                let hold = ready_at.elapsed().as_secs_f32() * 1000.0;
+                let _ = input.acks.send(format!("{counter},{hold:.1}"));
+            }
+            frames += 1;
+            bytes += data.len();
+            let backlog = input.backlog.load(Ordering::Relaxed);
+            let mut stats = stats.lock().unwrap();
+            let entry = stats.receiving.entry(peer).or_default();
+            entry.width = width as u32;
+            entry.height = height as u32;
+            entry.decode_ms = smooth(entry.decode_ms, decode_ms);
+            entry.backlog = backlog;
+            let elapsed = window.elapsed().as_secs_f32();
+            if elapsed >= 1.0 {
+                entry.fps = frames as f32 / elapsed;
+                entry.kbps = bytes as f32 * 8.0 / 1000.0 / elapsed;
+                (window, frames, bytes) = (Instant::now(), 0, 0);
+            }
         }
     })
 }

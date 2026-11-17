@@ -67,6 +67,26 @@ fn the_viewer_decodes_what_the_broadcaster_sends() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(log.iter().any(|e| e.contains("Encoder")), "events: {log:?}");
+
+    // The viewer confirms what it shows, and both sides learn where the time went.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        relay(&ana, ANA, &beto, &mut log);
+        relay(&beto, BETO, &ana, &mut log);
+        let sent = ana.stats();
+        let seen = beto.stats();
+        let path = sent.viewers.get(&BETO);
+        let feedback = seen.receiving.get(&ANA).map(|r| r.path.total_ms > 0.0);
+        if path.is_some_and(|p| p.total_ms > 0.0) && feedback == Some(true) {
+            let path = path.unwrap();
+            assert!(path.total_ms >= path.encode_ms, "{path:?}");
+            assert!(sent.sending.as_ref().is_some_and(|s| s.width == 640), "{sent:?}");
+            assert!(seen.receiving[&ANA].decode_ms > 0.0, "{seen:?}");
+            break;
+        }
+        assert!(Instant::now() < deadline, "no measurements: {sent:?} {seen:?}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 #[test]

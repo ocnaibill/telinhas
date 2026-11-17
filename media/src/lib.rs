@@ -14,6 +14,8 @@ mod actor;
 mod link;
 mod picture;
 mod send;
+mod stamp;
+mod stats;
 
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -22,6 +24,7 @@ use std::sync::{Arc, Mutex};
 pub use link::LinkConfig;
 pub use picture::Picture;
 pub use send::{BroadcastSource, BroadcastSpec};
+pub use stats::{Path, Receiving, Sending, Stats};
 pub use telinhas_protocol::{PeerId, SignalKind, Value};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
@@ -80,6 +83,7 @@ pub struct Media {
     commands: UnboundedSender<Command>,
     events: Mutex<Receiver<Event>>,
     latest: Latest,
+    stats: Arc<Mutex<Stats>>,
 }
 
 impl Media {
@@ -89,11 +93,13 @@ impl Media {
         let (commands, inbox) = unbounded_channel();
         let (events_tx, events) = channel();
         let latest: Latest = Arc::default();
+        let stats: Arc<Mutex<Stats>> = Arc::default();
         let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(wake);
         let shared = actor::Shared {
             link,
             events: events_tx,
             latest: Arc::clone(&latest),
+            stats: Arc::clone(&stats),
             wake,
         };
         std::thread::Builder::new()
@@ -113,6 +119,7 @@ impl Media {
             commands,
             events: Mutex::new(events),
             latest,
+            stats,
         }
     }
 
@@ -122,6 +129,11 @@ impl Media {
 
     pub fn try_event(&self) -> Option<Event> {
         self.events.lock().ok()?.try_recv().ok()
+    }
+
+    /// A copy of the measurements so far.
+    pub fn stats(&self) -> Stats {
+        self.stats.lock().map(|s| s.clone()).unwrap_or_default()
     }
 
     /// The newest decoded picture of what `peer` is broadcasting.

@@ -16,6 +16,8 @@ use telinhas_protocol::PeerId;
 use tokio::sync::broadcast;
 
 use crate::link::BWE_INITIAL;
+use crate::stamp;
+use crate::stats::{Sending, Stats, smooth};
 use crate::{Event, EventSender};
 
 /// What to broadcast.
@@ -59,8 +61,12 @@ impl BroadcastSpec {
 
 /// One encoded picture on its way to every viewer.
 pub(crate) struct Encoded {
+    /// The access unit, with its frame number stamped in front.
     pub data: Bytes,
     pub duration: Duration,
+    pub counter: u32,
+    /// When the picture was taken from the screen.
+    pub captured_at: Instant,
 }
 
 /// The congestion estimate of each viewer's path, for the encoder to follow.
@@ -206,6 +212,7 @@ pub(crate) fn spawn_broadcast(
     stop: Arc<AtomicBool>,
     need_key: Arc<AtomicBool>,
     targets: Targets,
+    stats: Arc<Mutex<Stats>>,
     events: EventSender,
     wake: Arc<dyn Fn() + Send + Sync>,
 ) -> JoinHandle<()> {
@@ -214,9 +221,10 @@ pub(crate) fn spawn_broadcast(
             let _ = events.send(event);
             wake();
         };
-        if let Err(error) = run(spec, &out, &stop, &need_key, &targets, &tell) {
+        if let Err(error) = run(spec, &out, &stop, &need_key, &targets, &stats, &tell) {
             tell(Event::BroadcastFailed(error.to_string()));
         }
+        stats.lock().unwrap().sending = None;
     })
 }
 
@@ -226,6 +234,7 @@ fn run(
     stop: &AtomicBool,
     need_key: &AtomicBool,
     targets: &Targets,
+    stats: &Mutex<Stats>,
     tell: &dyn Fn(Event),
 ) -> Result<()> {
     let frames = Frames::open(&spec)?;
@@ -259,6 +268,13 @@ fn run(
         kbps = pick(headroom);
         encoder.set_max_kbps(kbps)?;
     }
+    stats.lock().unwrap().sending = Some(Sending {
+        encoder: info.name.clone(),
+        hardware: info.hardware,
+        width,
+        height,
+        ..Sending::default()
+    });
     tell(Event::Encoder {
         name: info.name,
         hardware: info.hardware,
@@ -272,6 +288,7 @@ fn run(
     let mut last_ceiling_change = Instant::now();
     let mut tick = 0u64;
     let mut picture = Vec::new();
+    let (mut window, mut window_frames, mut window_bytes) = (Instant::now(), 0u32, 0usize);
     while !stop.load(Ordering::Relaxed) {
         let wanted = pick(headroom);
         if wanted.abs_diff(kbps) * 100 / kbps.max(1) > CEILING_STEP_PERCENT
@@ -285,6 +302,7 @@ fn run(
             encoder.request_keyframe();
         }
 
+        let captured_at = Instant::now();
         let (w, h) = frames.fill(tick, &mut picture);
         if (w, h) != (width, height) {
             // The source changed size (a window was resized): open the
@@ -292,20 +310,41 @@ fn run(
             (width, height) = (w, h);
             encoder = telinhas_codec::create(spec.backend, options(width, height, kbps))?.encoder;
         }
+        let encode_started = Instant::now();
         let packets = encoder.encode(&Frame {
             width: w,
             height: h,
             stride: w as usize * 4,
             bgra: &picture,
         })?;
+        let encode_ms = encode_started.elapsed().as_secs_f32() * 1000.0;
+        let counter = tick as u32;
         for packet in packets {
+            let data = Bytes::from(stamp::prepend(counter, &packet.data));
+            window_bytes += data.len();
             // No receiver means nobody is connected yet: the picture is
             // dropped, and a keyframe is asked for when someone connects.
             let _ = out.send(Arc::new(Encoded {
-                data: Bytes::from(packet.data),
+                data,
                 duration: period,
+                counter,
+                captured_at,
             }));
         }
+        window_frames += 1;
+        let elapsed = window.elapsed().as_secs_f32();
+        let mut stats = stats.lock().unwrap();
+        if let Some(sending) = stats.sending.as_mut() {
+            sending.width = w;
+            sending.height = h;
+            sending.encode_ms = smooth(sending.encode_ms, encode_ms);
+            if elapsed >= 1.0 {
+                sending.fps = window_frames as f32 / elapsed;
+                sending.kbps = window_bytes as f32 * 8.0 / 1000.0 / elapsed;
+                (window, window_frames, window_bytes) = (Instant::now(), 0, 0);
+            }
+        }
+        drop(stats);
         tick += 1;
 
         next += period;
