@@ -27,10 +27,7 @@ fn copy_ffmpeg_dlls() {
     use std::path::PathBuf;
 
     println!("cargo:rerun-if-env-changed=FFMPEG_DIR");
-    let Some(dir) = std::env::var_os("FFMPEG_DIR") else {
-        return;
-    };
-    let bin = PathBuf::from(dir).join("bin");
+    println!("cargo:rerun-if-env-changed=PATH");
     // OUT_DIR is target/<profile>/build/<package>/out: the executable sits
     // three levels up.
     let Some(target) = std::env::var_os("OUT_DIR")
@@ -39,19 +36,65 @@ fn copy_ffmpeg_dlls() {
     else {
         return;
     };
-    let Ok(entries) = std::fs::read_dir(&bin) else {
-        println!("cargo:warning=no FFmpeg DLLs found in {}", bin.display());
+    // Where the DLLs may be: next to FFMPEG_DIR's headers, or on the PATH.
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = std::env::var_os("FFMPEG_DIR") {
+        candidates.push(PathBuf::from(&dir).join("bin"));
+        candidates.push(PathBuf::from(dir));
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path));
+    }
+    let is_ffmpeg_dll = |path: &std::path::Path| {
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        name.ends_with(".dll")
+            && [
+                "avcodec",
+                "avdevice",
+                "avfilter",
+                "avformat",
+                "avutil",
+                "swresample",
+                "swscale",
+                "postproc",
+            ]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+    };
+    let Some(dir) = candidates.into_iter().find(|dir| {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .starts_with("avcodec")
+            })
+    }) else {
+        println!(
+            "cargo:warning=FFmpeg DLLs not found (set FFMPEG_DIR or put them on the PATH): the app will not start without them next to the executable"
+        );
         return;
     };
-    for entry in entries.flatten() {
+    let mut copied = 0;
+    for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
         let path = entry.path();
-        if path
-            .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("dll"))
+        if is_ffmpeg_dll(&path)
             && let Some(name) = path.file_name()
-            && let Err(error) = std::fs::copy(&path, target.join(name))
         {
-            println!("cargo:warning=could not copy {}: {error}", path.display());
+            match std::fs::copy(&path, target.join(name)) {
+                Ok(_) => copied += 1,
+                Err(error) => println!("cargo:warning=could not copy {}: {error}", path.display()),
+            }
         }
     }
+    println!(
+        "cargo:warning=copied {copied} FFmpeg DLLs from {}",
+        dir.display()
+    );
 }
