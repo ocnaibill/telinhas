@@ -69,11 +69,17 @@ pub(crate) type Targets = Arc<Mutex<HashMap<PeerId, Arc<AtomicU64>>>>;
 /// The weakest path decides: the encoder runs once for everybody.
 fn weakest(targets: &Targets) -> f64 {
     let targets = targets.lock().unwrap();
-    targets
+    let lowest = targets
         .values()
         .map(|t| f64::from_bits(t.load(Ordering::Relaxed)))
         .filter(|t| *t > 0.0)
-        .fold(BWE_INITIAL, f64::min)
+        .fold(f64::INFINITY, f64::min);
+    // Nobody connected yet: start from the initial guess.
+    if lowest.is_finite() {
+        lowest
+    } else {
+        BWE_INITIAL
+    }
 }
 
 /// A ceiling must move this much to be changed, and not more often than

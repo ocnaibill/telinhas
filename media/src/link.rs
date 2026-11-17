@@ -45,9 +45,12 @@ use crate::picture::Picture;
 const H264_FMTP: &str = "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f";
 const H264_PAYLOAD_TYPE: PayloadType = 102;
 
-pub(crate) const BWE_INITIAL: f64 = 1_500_000.0;
+// Starting low made the first seconds blocky and the climb slow (GCC adds a
+// few percent per second), so start where a home connection usually is and
+// let the estimator pull down if the path cannot take it.
+pub(crate) const BWE_INITIAL: f64 = 6_000_000.0;
 const BWE_MIN: f64 = 150_000.0;
-const BWE_MAX: f64 = 8_000_000.0;
+const BWE_MAX: f64 = 20_000_000.0;
 
 #[derive(Debug, Clone)]
 pub struct LinkConfig {

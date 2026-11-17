@@ -21,6 +21,7 @@ struct Actions {
     open_broadcast: bool,
     stop_broadcast: bool,
     copy_code: bool,
+    fullscreen: bool,
 }
 
 /// Capacity the room is sized for (DEC-03, DEC-24): above it, only a warning.
@@ -43,13 +44,26 @@ impl TelinhasApp {
         let mut actions = Actions::default();
         let time = self.started.elapsed().as_secs_f32();
 
-        self.top_bar(ui, &mut room, &mut actions, time);
-        self.banners(ui, &room);
-        self.side_panel(ui, &mut room, time);
+        let ctx = ui.ctx().clone();
+        let toggle = ctx.input(|i| i.key_pressed(egui::Key::F11))
+            || (self.fullscreen && ctx.input(|i| i.key_pressed(egui::Key::Escape)));
+        if toggle {
+            self.fullscreen = !self.fullscreen;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+        }
+        if !self.fullscreen {
+            self.top_bar(ui, &mut room, &mut actions, time);
+            self.banners(ui, &room);
+            self.side_panel(ui, &mut room, time);
+        }
         self.stage(ui, &mut room, &mut actions);
         self.floating_bar(&ui.ctx().clone(), &mut room, &mut actions);
         self.join_request_popup(&ui.ctx().clone(), &mut room);
 
+        if actions.fullscreen {
+            self.fullscreen = !self.fullscreen;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+        }
         if actions.copy_code {
             ui.ctx().copy_text(room.code.clone());
             self.show_toast("Código copiado");
@@ -120,10 +134,18 @@ impl TelinhasApp {
                             ui.label(RichText::new("Aprovar entradas").small().color(theme::TEXT_DIM));
                         }
                     }
+                    // Real participants have no latency measure yet (it comes
+                    // with the monitor); showing a made-up number would lie.
+                    let measured = self.is_demo() || room.participants.iter().any(|p| !p.is_me && p.latency_ms > 0);
                     let latency = room.average_latency() as f32 + (time * 1.7).sin() * 2.0;
+                    let text = if measured {
+                        format!("{}  {:.0} ms", theme::icons::LIGHTNING, latency.max(0.0))
+                    } else {
+                        format!("{}  — ms", theme::icons::LIGHTNING)
+                    };
                     theme::pill(
                         ui,
-                        format!("{}  {:.0} ms", theme::icons::LIGHTNING, latency.max(0.0)),
+                        text,
                         theme::GREEN,
                         theme::GREEN_DIM,
                     )
@@ -570,7 +592,10 @@ impl TelinhasApp {
 
     fn floating_bar(&mut self, ctx: &egui::Context, room: &mut Room, actions: &mut Actions) {
         egui::Area::new(theme::id("floating_bar"))
-            .anchor(Align2::CENTER_BOTTOM, [-155.0, -20.0])
+            .anchor(
+                Align2::CENTER_BOTTOM,
+                [if self.fullscreen { 0.0 } else { -155.0 }, -20.0],
+            )
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 egui::Frame::new()
@@ -623,6 +648,14 @@ impl TelinhasApp {
                             .clicked()
                             {
                                 actions.open_broadcast = true;
+                            }
+                            let (icon, hint) = if self.fullscreen {
+                                (theme::icons::CORNERS_IN, "Sair da tela cheia (Esc)")
+                            } else {
+                                (theme::icons::CORNERS_OUT, "Tela cheia (F11)")
+                            };
+                            if theme::icon_button(ui, icon, hint, self.fullscreen).clicked() {
+                                actions.fullscreen = true;
                             }
                             if theme::danger_button(ui, format!("{}  Sair", theme::icons::SIGN_OUT))
                                 .clicked()

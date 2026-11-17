@@ -87,6 +87,8 @@ pub struct TelinhasApp {
     pub(crate) requests: Vec<JoinRequest>,
     /// The connection dropped inside the room and the client is retrying.
     pub(crate) reconnecting: bool,
+    /// Only the video and the control bar, in a full-screen window.
+    pub(crate) fullscreen: bool,
     pub(crate) wake: Option<egui::Context>,
 }
 
@@ -206,6 +208,7 @@ impl TelinhasApp {
             notice: None,
             requests: Vec::new(),
             reconnecting: false,
+            fullscreen: false,
             wake: None,
         }
     }
@@ -277,6 +280,12 @@ impl TelinhasApp {
         }
         self.room = None;
         self.requests.clear();
+        if self.fullscreen {
+            self.fullscreen = false;
+            if let Some(ctx) = &self.wake {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+            }
+        }
         self.reconnecting = false;
         self.link = Link::Idle;
         self.mock.clear();
