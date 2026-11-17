@@ -83,6 +83,22 @@ Se o spike passar, o M4 segue com o egui. Se falhar, eu volto com os números e 
 
 `ui-spike/` (`telinhas-ui-spike`): janela `eframe` com wgpu, N cartões de vídeo (grade dinâmica) alimentados por quadros I420 em 1080p60 gerados por threads, cada um enviado à GPU como três texturas (`R8Unorm`) e convertido para RGB por um shader dentro de um `CallbackTrait` do `egui_wgpu`, com cantos arredondados no próprio shader. Sobre o vídeo: selo "AO VIVO", plaqueta com avatar e nome, borda verde, webcam em picture-in-picture, barra flutuante de controles e painel lateral com volume, como na tela "sala ao vivo". Mede fps da interface, tempo por quadro (p50, p95, p99, máximo), CPU e MB/s enviados à GPU.
 
+**Resultado no Windows (RTX 2070 SUPER, monitor de 144 Hz, 1080p60 por cartão, 20 s cada):**
+
+| Cartões | Fps da interface | Tempo por quadro p50 / p95 / p99 | CPU (um núcleo) | Envio à GPU |
+|---------|------------------|-----------------------------------|-----------------|-------------|
+| 1 | 142,0 | 6,9 / 7,8 / 9,0 ms | 32% | 197 MB/s |
+| 3 | 142,8 | 7,0 / 7,9 / 8,5 ms | 52% | 570 MB/s |
+| 6 | 140,1 | 6,9 / 8,3 / 10,7 ms | 78% | 1130 MB/s |
+| 6, imagem parada | 142,5 | 6,9 / 7,4 / 8,0 ms | **23%** | 0 |
+| 6, sem esperar o monitor | **888** | 1,0 / 2,2 / 3,1 ms | 127% | 1130 MB/s |
+
+**O spike passou:** 6 vídeos de 1080p60 ao mesmo tempo, com o shader próprio, seguram a taxa do monitor de 144 Hz com p95 de cerca de 8 ms. Sem esperar o monitor o caminho faz 888 quadros por segundo, ou seja, tem cerca de 6 vezes de folga. Os picos isolados de 30 a 48 ms aparecem nos primeiros segundos de cada rodada (abertura da janela).
+
+Onde vai o custo: a interface sozinha gasta cerca de 23% de um núcleo redesenhando a 144 fps (6 cartões parados). O resto vem do envio dos quadros à GPU (1,1 GB/s com 6 cartões) e das threads que geram os quadros de teste, que no app serão o decodificador. Duas otimizações já previstas: redesenhar só quando chega quadro novo (60 por segundo em vez de 144) e, com decodificação por hardware, manter os quadros na GPU, sem o envio pela CPU.
+
+O egui fica confirmado como a biblioteca de UI. O `iced` deixa de ser necessário como plano B para o vídeo.
+
 **Compilou na primeira com o egui 0.37 e o wgpu 30** e rodou no WSLg (software, `lavapipe`), o que confirma que o caminho de pintura personalizada funciona. Os números do WSLg **não valem**: sem GPU de verdade a rasterização é por software (CPU em 400%). A medição que importa é no Windows, com a GPU.
 
 Opções: `--tiles N`, `--width`, `--height`, `--fps`, `--seconds`, `--static-frames` (isola o custo da interface do custo do vídeo), `--no-vsync`, `--no-webcam`.
