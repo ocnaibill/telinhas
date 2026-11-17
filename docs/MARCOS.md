@@ -31,7 +31,7 @@ Convenção: **RF** são os requisitos funcionais e **RNF** os não funcionais (
 
 **Saída:** vídeo estável por 10 minutos entre duas máquinas em redes diferentes. Relatório curto: o `webrtc-rs` serve ou trocamos (`str0m` ou libwebrtc). Essa é uma decisão do mantenedor. O ensaio entre redes é feito pelo mantenedor, com o guia em `docs/ENSAIO-M2.md`.
 
-## M3 — Captura real e encode por hardware (uma plataforma)
+## M3 — Captura real e encode por hardware (uma plataforma) — concluído (DEC-60)
 
 - Captura de monitor e de janela no Windows (Windows Graphics Capture; DEC-53).
 - Encode H.264 por hardware via FFmpeg atrás da trait `Encoder` (DEC-39), fallback por software com aviso (RF-14).

@@ -1,6 +1,6 @@
 # Telinhas — Plano do M3
 
-> Decisões da seção 2 confirmadas pelo mantenedor (DEC-58). Escopo do M3 em `MARCOS.md`: captura real de monitor e janela no Windows, encode H.264 por hardware atrás da trait `Encoder` (DEC-39), fallback por software com aviso (RF-14), resolução e FPS vindos do hardware e da fonte (RF-05, RF-22), e a medição dos bitrates reais de 1080p60.
+> Decisões da seção 2 confirmadas pelo mantenedor (DEC-58). M3 concluído (DEC-60). Escopo do M3 em `MARCOS.md`: captura real de monitor e janela no Windows, encode H.264 por hardware atrás da trait `Encoder` (DEC-39), fallback por software com aviso (RF-14), resolução e FPS vindos do hardware e da fonte (RF-05, RF-22), e a medição dos bitrates reais de 1080p60.
 
 ## 1. O que o M3 precisa entregar
 
