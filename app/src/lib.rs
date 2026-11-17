@@ -1,6 +1,15 @@
 //! Telinhas desktop client.
 
-/// Human-readable name and version, used by the CLI and later by the UI.
+mod app;
+mod mockvideo;
+mod model;
+mod screens;
+mod theme;
+mod video;
+
+pub use app::TelinhasApp;
+
+/// Human-readable name and version, used by the CLI and the window title.
 pub fn banner() -> String {
     format!("Telinhas {}", env!("CARGO_PKG_VERSION"))
 }
