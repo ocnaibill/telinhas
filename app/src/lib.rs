@@ -15,6 +15,11 @@ pub fn window_icon() -> Option<eframe::egui::IconData> {
     logo::window_icon()
 }
 
+/// The app icon as PNG at `size` pixels, to build the `.ico` file.
+pub fn icon_png(size: u32) -> Option<Vec<u8>> {
+    logo::icon_png(size)
+}
+
 /// Human-readable name and version, used by the CLI and the window title.
 pub fn banner() -> String {
     format!("Telinhas {}", env!("CARGO_PKG_VERSION"))
