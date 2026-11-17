@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["app", "capture", "signaling", "spike"]
+members = ["app", "capture", "codec", "signaling", "spike"]
 
 [workspace.package]
 version = "0.0.0"

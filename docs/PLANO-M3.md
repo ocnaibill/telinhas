@@ -129,6 +129,20 @@ Leituras:
 
 Qualidade a olho de 1080p60 a 8 Mbps e de 720p30 a 3 Mbps (CBR, conteúdo pesado): a avaliar pelo mantenedor.
 
+## 2.7 Estado do M3c (encoder por bibliotecas)
+
+**Feito e verificado (Linux):** crate `telinhas-codec` com a trait `Encoder` (DEC-39): `encode`, `request_keyframe`, `set_max_kbps` e `info`. Política de taxa da seção 2.6 (qualidade constante com teto, quadros-chave sob demanda). Backend de software (`openh264`) com 4 testes (primeiro quadro é chave, quadro-chave sob pedido, troca de teto, tamanhos ímpares recusados). Fallback automático para software com o motivo, para o aviso da DEC-15. Comando `spike encode`, que roda o encoder sobre a tela real ou uma imagem sintética, muda o teto no meio da execução e pede quadro-chave, e mede o tempo por quadro.
+
+**Escrito, mas ainda não compilado:** o backend NVENC (`codec/src/nvenc.rs`, atrás da feature `ffmpeg`), escrito a partir do código-fonte do crate `ffmpeg-the-third` 6.0 (FFmpeg 9.0). A compilação exige as bibliotecas de desenvolvimento do FFmpeg e o libclang.
+
+**Para compilar no Windows (uma vez):**
+1. Baixar a build **LGPL compartilhada** do FFmpeg 9.0 para Windows (BtbN, `ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`), extrair em `C:\ffmpeg` e definir `FFMPEG_DIR=C:\ffmpeg` e `C:\ffmpeg\bin` no `PATH`.
+2. Instalar o LLVM: `winget install LLVM.LLVM` e definir `LIBCLANG_PATH` para a pasta `bin` dele.
+3. Compilar: `cargo build --release -p telinhas-spike --features ffmpeg`.
+4. Testar: `telinhas-spike.exe encode --source monitor:0 --fps 60 --seconds 30 --max-kbps 8000 --cap-change 10:3000 --keyframe-at 20 --backend hardware`.
+
+O build LGPL é o que serve para distribuir o app (a build "full" do gyan.dev é GPL).
+
 ## 3. Passos
 
 Cada passo termina com algo que você roda e me devolve.

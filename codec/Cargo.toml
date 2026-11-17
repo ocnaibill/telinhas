@@ -1,0 +1,20 @@
+[package]
+name = "telinhas-codec"
+description = "Video encoders for Telinhas: hardware H.264 through FFmpeg, software fallback"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Hardware encoding (NVENC) through the FFmpeg libraries. Needs the FFmpeg
+# development files and libclang to build; see docs/PLANO-M3.md.
+ffmpeg = ["dep:ffmpeg-the-third", "dep:libc"]
+
+[dependencies]
+openh264 = "0.9.10"
+ffmpeg-the-third = { version = "6.0.0", optional = true }
+libc = { version = "0.2", optional = true }

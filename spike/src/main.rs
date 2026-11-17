@@ -47,6 +47,40 @@ enum Command {
     },
     /// Lists monitors, windows and GPUs, and tests which H.264 encoders work.
     Probe,
+    /// Runs the real encoder (hardware with a software fallback) and checks the
+    /// bitrate ceiling, keyframes on demand and encode time.
+    Encode {
+        /// `synthetic`, `monitor:N` or `window:TEXT`.
+        #[arg(long, default_value = "synthetic")]
+        source: String,
+        #[arg(long, default_value_t = 20)]
+        seconds: u64,
+        #[arg(long, default_value_t = 60)]
+        fps: u32,
+        /// Size of the synthetic picture.
+        #[arg(long, default_value_t = 1280)]
+        width: u32,
+        #[arg(long, default_value_t = 720)]
+        height: u32,
+        /// How noisy the synthetic picture is, 0 to 5.
+        #[arg(long, default_value_t = 3)]
+        noise: u8,
+        /// Constant quality, lower is better.
+        #[arg(long, default_value_t = 23)]
+        quality: u32,
+        /// Bitrate ceiling in kbps.
+        #[arg(long, default_value_t = 8000)]
+        max_kbps: u32,
+        /// `auto`, `hardware` or `software`.
+        #[arg(long, default_value = "auto")]
+        backend: String,
+        /// Change the ceiling mid-run, as `SECONDS:KBPS`, such as `10:3000`.
+        #[arg(long)]
+        cap_change: Option<String>,
+        /// Ask for a keyframe this many seconds in.
+        #[arg(long)]
+        keyframe_at: Option<u64>,
+    },
     /// Captures the screen, encodes it with NVENC through ffmpeg and reports
     /// the bitrate the content needs.
     Measure {
@@ -193,6 +227,31 @@ async fn main() -> Result<()> {
                 save,
             })
         }
+        Command::Encode {
+            source,
+            seconds,
+            fps,
+            width,
+            height,
+            noise,
+            quality,
+            max_kbps,
+            backend,
+            cap_change,
+            keyframe_at,
+        } => telinhas_spike::encode_cmd::run(&telinhas_spike::encode_cmd::Args {
+            source,
+            seconds,
+            fps,
+            width,
+            height,
+            noise,
+            quality,
+            max_kbps,
+            backend,
+            cap_change,
+            keyframe_at,
+        }),
         Command::Probe => {
             telinhas_spike::probe::run();
             Ok(())
