@@ -38,7 +38,7 @@ fn mean(values: &[f64]) -> f64 {
 
 /// `monitor:N`, `window:HANDLE` or `window:TEXT` (matches the title or the
 /// program name, ignoring case).
-fn parse_source(text: &str) -> Result<Source> {
+pub fn parse_source(text: &str) -> Result<Source> {
     let (kind, value) = text
         .split_once(':')
         .ok_or_else(|| anyhow!("use monitor:N or window:HANDLE-OR-TEXT"))?;

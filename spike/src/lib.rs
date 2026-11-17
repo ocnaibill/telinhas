@@ -5,6 +5,7 @@
 
 pub mod capture_cmd;
 pub mod link;
+pub mod measure;
 pub mod media;
 pub mod probe;
 pub mod signaling;

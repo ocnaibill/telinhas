@@ -82,6 +82,8 @@ Mudanças feitas depois dessas medições: o pool passou de 2 para 4 buffers e o
 
 **Conclusão:** o Windows Graphics Capture entrega só em múltiplos do vsync e **arredonda o intervalo mínimo para cima**: num monitor de 144 Hz, 60 fps viram 48 (3 atualizações), e sem pedido nenhum ele se comporta como um teto perto de 60. O app, então, pede sempre a taxa cheia do monitor e escolhe os quadros em software (`Pacer`, em `capture/src/pacer.rs`), o que dá 60 fps de verdade com intervalos de 13,9 ou 20,8 ms. Os testes unitários do `Pacer` cobrem 144→60, 144→30, 72→60, 60→60 e uma fonte mais lenta que o alvo. Quadros descartados pelo pacer não passam pela cópia da GPU.
 
+**Verificado no Windows (pacer):** `--max-fps 60` no monitor de 144 Hz entregou **60,0 fps** (intervalos de 13,9 e 20,8 ms), `--max-fps 30` entregou **30,0 fps** (34,7 ms), e o ultrawide de 60 Hz também 60,0 fps. A CPU ficou em 13% de um núcleo a 60 fps e 7% a 30 fps, com a cópia da GPU em 1,5 a 2 ms por quadro. O monitor de 60 Hz também produz cerca de 144 quadros por segundo para o sistema, porque o compositor (DWM) roda na taxa do monitor mais rápido; o pacer escolhe os 60.
+
 A medição varia com o que está na tela, porque o Windows só entrega quadro quando a imagem muda. Para medir fps é preciso conteúdo em movimento constante.
 
 ## 3. Passos

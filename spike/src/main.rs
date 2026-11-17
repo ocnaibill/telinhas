@@ -47,6 +47,25 @@ enum Command {
     },
     /// Lists monitors, windows and GPUs, and tests which H.264 encoders work.
     Probe,
+    /// Captures the screen, encodes it with NVENC through ffmpeg and reports
+    /// the bitrate the content needs.
+    Measure {
+        /// `monitor:N`, `window:HANDLE` or `window:TEXT`.
+        #[arg(long)]
+        source: String,
+        #[arg(long, default_value_t = 30)]
+        seconds: u64,
+        #[arg(long, default_value_t = 60)]
+        fps: u32,
+        /// `cq:N` (constant quality, lower is better) or `cbr:KBPS`.
+        #[arg(long, default_value = "cq:23")]
+        rate: String,
+        /// Scale before encoding, as `WIDTHxHEIGHT`, such as `1280x720`.
+        #[arg(long)]
+        scale: Option<String>,
+        #[arg(long)]
+        no_cursor: bool,
+    },
     /// Captures a monitor or window and measures it, without encoding.
     Capture {
         /// `monitor:N`, `window:HANDLE` or `window:TEXT` (title or program).
@@ -142,6 +161,31 @@ async fn main() -> Result<()> {
             no_border,
             max_fps,
         } => telinhas_spike::capture_cmd::run(&source, seconds, !no_cursor, !no_border, max_fps),
+        Command::Measure {
+            source,
+            seconds,
+            fps,
+            rate,
+            scale,
+            no_cursor,
+        } => {
+            let scale = scale
+                .map(|text| {
+                    let (w, h) = text
+                        .split_once('x')
+                        .ok_or_else(|| anyhow::anyhow!("use WIDTHxHEIGHT"))?;
+                    anyhow::Ok((w.parse()?, h.parse()?))
+                })
+                .transpose()?;
+            telinhas_spike::measure::run(&telinhas_spike::measure::Args {
+                source,
+                seconds,
+                fps,
+                rate,
+                scale,
+                cursor: !no_cursor,
+            })
+        }
         Command::Probe => {
             telinhas_spike::probe::run();
             Ok(())
