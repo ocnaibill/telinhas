@@ -55,10 +55,10 @@ fn open(options: &Options) -> Result<encoder::video::Encoder> {
     settings.set("preset", "p1");
     settings.set("tune", "ll");
     settings.set("rc", "vbr");
-    settings.set("cq", &options.rate.quality.to_string());
+    settings.set("cq", options.rate.quality.to_string());
     settings.set("b", "0");
-    settings.set("maxrate", &max_bps.to_string());
-    settings.set("bufsize", &(max_bps / 2).to_string());
+    settings.set("maxrate", max_bps.to_string());
+    settings.set("bufsize", (max_bps / 2).to_string());
     settings.set("zerolatency", "1");
     settings.set("rc-lookahead", "0");
     // Without this a requested I-frame is not an IDR, and a new viewer could
