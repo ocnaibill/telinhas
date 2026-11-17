@@ -133,7 +133,20 @@ Qualidade a olho de 1080p60 a 8 Mbps e de 720p30 a 3 Mbps (CBR, conteúdo pesado
 
 **Feito e verificado (Linux):** crate `telinhas-codec` com a trait `Encoder` (DEC-39): `encode`, `request_keyframe`, `set_max_kbps` e `info`. Política de taxa da seção 2.6 (qualidade constante com teto, quadros-chave sob demanda). Backend de software (`openh264`) com 4 testes (primeiro quadro é chave, quadro-chave sob pedido, troca de teto, tamanhos ímpares recusados). Fallback automático para software com o motivo, para o aviso da DEC-15. Comando `spike encode`, que roda o encoder sobre a tela real ou uma imagem sintética, muda o teto no meio da execução e pede quadro-chave, e mede o tempo por quadro.
 
-**Escrito, mas ainda não compilado:** o backend NVENC (`codec/src/nvenc.rs`, atrás da feature `ffmpeg`), escrito a partir do código-fonte do crate `ffmpeg-the-third` 6.0 (FFmpeg 9.0). A compilação exige as bibliotecas de desenvolvimento do FFmpeg e o libclang.
+**NVENC verificado no WSL** (RTX 2070 SUPER, FFmpeg 9.0 LGPL compartilhado da BtbN, `ffmpeg-the-third` 6.0; o backend `codec/src/nvenc.rs` compilou na primeira e roda pela GPU por `libnvidia-encode`):
+
+| Medida (1080p60, imagem sintética com ruído nível 4) | Resultado |
+|------|-----------|
+| Tempo de encode por quadro (inclui copiar o quadro para o FFmpeg) | p50 4,2 ms, p95 5,2 a 5,9 ms. **RNF-03 (≤ 8 ms) atendido** |
+| Primeiro quadro | até 33 ms (abertura da sessão do NVENC) |
+| Trocar o teto de 8 para 3 Mbps **reabrindo** o encoder | **449 ms** parado, cerca de 28 quadros perdidos |
+| Trocar o teto **no lugar** (`set_max_bit_rate`) | **0 ms**, nenhum quadro perdido, um quadro-chave; a média desce de 8 para 3 Mbps em cerca de 6 s |
+| Quadro-chave sob pedido | chega em até 1 s (aparece no relatório do segundo seguinte) |
+| Respeito ao teto de 8 Mbps com este ruído | média de 9,0 Mbps (12% acima), pico de 11,6 Mbps (45% acima). Com o TestUFO real o pico foi 24% acima: a folga de planejamento depende do conteúdo |
+
+O padrão do backend é a troca no lugar. O teto novo leva alguns segundos para se refletir no bitrate, então o controle de congestionamento deve mudar o teto com histerese (a DEC-44 já prevê reconfigurar o encoder), e não a cada relatório.
+
+O restante do M3c, no Windows: confirmar o mesmo NVENC com a captura real.
 
 **Para compilar no Windows (uma vez):**
 1. Baixar a build **LGPL compartilhada** do FFmpeg 9.0 para Windows (BtbN, `ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`), extrair em `C:\ffmpeg` e definir `FFMPEG_DIR=C:\ffmpeg` e `C:\ffmpeg\bin` no `PATH`.
