@@ -1,3 +1,10 @@
+// A release build on Windows opens no console window next to the app. Debug
+// builds, and release builds made with `--features console`, keep it for logs.
+#![cfg_attr(
+    all(windows, not(debug_assertions), not(feature = "console")),
+    windows_subsystem = "windows"
+)]
+
 use eframe::egui;
 
 fn main() -> eframe::Result {

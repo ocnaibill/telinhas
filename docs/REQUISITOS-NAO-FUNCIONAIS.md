@@ -62,6 +62,7 @@ Um notebook de uso comum com GPU integrada que tenha encoder H.264 por hardware 
 |----|-----------|
 | RNF-26 | Um instalador ou binário por sistema, sem exigir runtime externo (a não ser o que o sistema já traz, como PipeWire no Linux). |
 | RNF-27 | Build reproduzível em CI para os três sistemas. |
+| RNF-28 | No Windows, o app não abre janela de console nem mostra uma ao iniciar processos auxiliares (por exemplo, com `CREATE_NO_WINDOW`). Em builds de depuração ou com `--features console` o console continua disponível para ler logs. |
 
 ## 8. Como será validado
 
