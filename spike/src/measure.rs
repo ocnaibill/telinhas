@@ -29,7 +29,7 @@ pub struct Args {
     pub source: String,
     pub seconds: u64,
     pub fps: u32,
-    /// `cq:N` (constant quality: what the content asks for) or `cbr:KBPS`.
+    /// `cq:N` (what the content asks for), `cbr:KBPS` or `capped:N:KBPS`.
     pub rate: String,
     pub scale: Option<(u32, u32)>,
     pub cursor: bool,
@@ -38,24 +38,47 @@ pub struct Args {
 }
 
 fn rate_args(rate: &str) -> Result<Vec<String>> {
-    let (kind, value) = rate.split_once(':').context("use cq:N or cbr:KBPS")?;
-    let number: u32 = value.parse().context("the value must be a number")?;
+    let (kind, value) = rate
+        .split_once(':')
+        .context("use cq:N, cbr:KBPS or capped:N:KBPS")?;
+    let number = |text: &str| -> Result<u32> { text.parse().context("the value must be a number") };
     Ok(match kind {
         "cq" => vec![
             "-rc".into(),
             "vbr".into(),
             "-cq".into(),
-            number.to_string(),
+            number(value)?.to_string(),
             "-b:v".into(),
             "0".into(),
         ],
+        // Constant bitrate: NVENC pads with filler to keep it exactly constant.
         "cbr" => vec![
             "-rc".into(),
             "cbr".into(),
             "-b:v".into(),
-            format!("{number}k"),
+            format!("{}k", number(value)?),
         ],
-        other => bail!("unknown rate control {other:?}; use cq or cbr"),
+        // Constant quality, but never above a ceiling: easy content stays
+        // cheap, hard content is held to the cap.
+        "capped" => {
+            let (quality, cap) = value
+                .split_once(':')
+                .context("use capped:QUALITY:KBPS, such as capped:23:8000")?;
+            let cap = number(cap)?;
+            vec![
+                "-rc".into(),
+                "vbr".into(),
+                "-cq".into(),
+                number(quality)?.to_string(),
+                "-b:v".into(),
+                "0".into(),
+                "-maxrate".into(),
+                format!("{cap}k"),
+                "-bufsize".into(),
+                format!("{}k", cap / 2),
+            ]
+        }
+        other => bail!("unknown rate control {other:?}; use cq, cbr or capped"),
     })
 }
 

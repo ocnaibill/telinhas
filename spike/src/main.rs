@@ -57,7 +57,8 @@ enum Command {
         seconds: u64,
         #[arg(long, default_value_t = 60)]
         fps: u32,
-        /// `cq:N` (constant quality, lower is better) or `cbr:KBPS`.
+        /// `cq:N` (constant quality, lower is better), `cbr:KBPS` or
+        /// `capped:N:KBPS` (constant quality with a bitrate ceiling).
         #[arg(long, default_value = "cq:23")]
         rate: String,
         /// Scale before encoding, as `WIDTHxHEIGHT`, such as `1280x720`.

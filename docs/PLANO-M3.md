@@ -108,6 +108,14 @@ Leituras:
 - **O que isso diz sobre a suposição de ~8 Mbps:** para esse tipo de conteúdo em qualidade alta, ela é pouco menos da metade do que o conteúdo pede. Com 11 espectadores, 19 Mbps seriam cerca de 209 Mbps de upload no transmissor, mais do que qualquer conexão residencial.
 - **Consequência para o desenho (a decidir):** o app não deve deixar o bitrate seguir a qualidade do conteúdo. Deve ter um **bitrate alvo por predefinição** (resolução, fps e bitrate), com o encoder limitado a ele, e a estimativa de banda do RF-06 deve usar esse alvo, não o que o conteúdo pediria. Falta medir o conteúdo real (texto, rolagem, vídeo, jogo) e definir as predefinições.
 
+### Tela parada: o CBR desperdiça banda (achado importante)
+
+Com a área de trabalho **parada** (1 quadro novo em 30 s; o `measure` repete o último quadro a 60 por segundo), o modo `cbr:8000` continuou em **8,0 Mbps constantes**, segundo após segundo. O NVENC em CBR preenche o fluxo para manter a taxa exata, mesmo sem nada para codificar. Para compartilhamento de tela, isso queimaria 8 Mbps por espectador com a tela parada, justo no caso mais comum (alguém lendo um documento).
+
+**Consequência:** o app não deve usar CBR. Deve usar qualidade constante com **teto de bitrate** (VBR com `-cq` e `-maxrate`), para que conteúdo fácil custe quase nada e conteúdo difícil fique limitado ao teto da predefinição. O comando `measure` ganhou o modo `capped:N:KBPS` para medir isso.
+
+Qualidade a olho de 1080p60 a 8 Mbps e de 720p30 a 3 Mbps (CBR, conteúdo pesado): a avaliar pelo mantenedor.
+
 ## 3. Passos
 
 Cada passo termina com algo que você roda e me devolve.
