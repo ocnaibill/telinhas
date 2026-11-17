@@ -5,7 +5,6 @@ use telinhas_net::{Command, Event, Failure, RoomSnapshot};
 use telinhas_protocol::{ConnectionState as WireState, LeaveReason};
 
 use crate::app::{JoinRequest, Link, TelinhasApp};
-use crate::mockvideo::MockSource;
 use crate::model::{ConnectionState, Participant, Room, Screen};
 
 impl TelinhasApp {
@@ -13,6 +12,34 @@ impl TelinhasApp {
     pub(crate) fn poll_net(&mut self) {
         while let Some(event) = self.net.as_ref().and_then(|net| net.try_event()) {
             self.on_event(event);
+        }
+        while let Some(event) = self.media.as_ref().and_then(|media| media.try_event()) {
+            self.on_media_event(event);
+        }
+    }
+
+    fn on_media_event(&mut self, event: telinhas_media::Event) {
+        use telinhas_media::Event as Media;
+        match event {
+            Media::Signal { to, kind, payload } => {
+                self.send(Command::Signal { to, kind, payload });
+            }
+            Media::Encoder { hardware, .. } => self.sim.software_encoder = !hardware,
+            Media::BroadcastFailed(reason) => {
+                if let Some(room) = self.room.as_mut() {
+                    room.broadcasting = false;
+                    let me = room.me_id();
+                    room.streams.retain(|s| s.owner_id != me);
+                }
+                self.send(Command::AnnounceStream {
+                    stream_id: "screen".to_owned(),
+                    kind: telinhas_protocol::StreamKind::Screen,
+                    live: false,
+                    meta: telinhas_protocol::Value::Null,
+                });
+                self.show_toast(format!("A transmissão parou: {reason}"));
+            }
+            Media::Receiving(_) => {}
         }
     }
 
@@ -38,6 +65,9 @@ impl TelinhasApp {
             }
             Event::PeerJoined(info) => {
                 let name = info.nickname.clone();
+                if let Some(media) = &self.media {
+                    media.send(telinhas_media::Command::PeerJoined(info.peer_id));
+                }
                 if let Some(room) = self.room.as_mut() {
                     room.participants.push(Participant {
                         peer_id: Some(info.peer_id),
@@ -54,30 +84,15 @@ impl TelinhasApp {
                 self.show_toast(format!("{name} entrou na sala"));
             }
             Event::PeerLeft { peer_id, reason } => {
+                if let Some(media) = &self.media {
+                    media.send(telinhas_media::Command::PeerLeft(peer_id));
+                }
                 let mut name = None;
                 if let Some(room) = self.room.as_mut() {
                     name = room.name_of(peer_id).map(str::to_owned);
                     room.participants.retain(|p| p.peer_id != Some(peer_id));
-                    let before = room.streams.len();
-                    let kept: Vec<bool> = room
-                        .streams
-                        .iter()
-                        .map(|s| s.owner_id != Some(peer_id))
-                        .collect();
-                    let mut index = 0;
-                    room.streams.retain(|_| {
-                        index += 1;
-                        kept[index - 1]
-                    });
-                    // The test pictures follow the streams that stay.
-                    if room.streams.len() != before {
-                        let mut index = 0;
-                        self.mock.retain(|_| {
-                            index += 1;
-                            kept.get(index - 1).copied().unwrap_or(true)
-                        });
-                        room.focus = 0;
-                    }
+                    room.streams.retain(|s| s.owner_id != Some(peer_id));
+                    room.focus = 0;
                 }
                 if let Some(name) = name {
                     self.show_toast(match reason {
@@ -141,15 +156,12 @@ impl TelinhasApp {
                 live,
                 meta,
             } => {
+                if !live && let Some(media) = &self.media {
+                    media.send(telinhas_media::Command::StreamEnded(from));
+                }
                 if let Some(room) = self.room.as_mut() {
-                    let before = room.streams.len();
                     room.apply_stream(from, &stream_id, kind, live, &meta);
-                    if room.streams.len() > before {
-                        self.mock
-                            .push(MockSource::start(1280, 720, 30, (before % 6) as u8));
-                    } else if room.streams.len() < before && !self.mock.is_empty() {
-                        self.mock.pop();
-                    }
+                    room.focus = room.focus.min(room.streams.len().saturating_sub(1));
                 }
             }
             Event::Reconnecting { .. } => self.reconnecting = true,
@@ -159,11 +171,21 @@ impl TelinhasApp {
                 fatal,
             } => self.on_failure(kind, &message, fatal),
             Event::Left => {}
-            // Media negotiation and latency belong to the video milestone.
-            Event::Signal { .. }
-            | Event::LayerRequest { .. }
-            | Event::LatencyReport { .. }
-            | Event::OverCapacity(_) => {}
+            Event::Signal {
+                from,
+                kind,
+                payload,
+            } => {
+                if let Some(media) = &self.media {
+                    media.send(telinhas_media::Command::Signal {
+                        from,
+                        kind,
+                        payload,
+                    });
+                }
+            }
+            // Layers and latency belong to later milestones.
+            Event::LayerRequest { .. } | Event::LatencyReport { .. } | Event::OverCapacity(_) => {}
         }
     }
 
@@ -186,14 +208,6 @@ impl TelinhasApp {
             return;
         }
         let room = Room::from_snapshot(&snapshot);
-        self.mock = (0..room.streams.len())
-            .map(|i| MockSource::start(1280, 720, 30, i as u8))
-            .collect();
-        self.mock_webcam = room
-            .streams
-            .iter()
-            .any(|s| s.has_webcam)
-            .then(|| MockSource::start(640, 360, 24, 3));
         let open_broadcast = self.home.mode == crate::model::EntryMode::Broadcasting;
         self.room = Some(room);
         self.screen = Screen::Room;

@@ -61,6 +61,9 @@ impl TelinhasApp {
         }
         if actions.stop_broadcast {
             room.broadcasting = false;
+            if let Some(media) = &self.media {
+                media.send(telinhas_media::Command::StopBroadcast);
+            }
             if let Some(index) = room.streams.iter().position(|s| s.owner == self.nickname) {
                 room.streams.remove(index);
                 if index < self.mock.len() {
@@ -441,13 +444,31 @@ impl TelinhasApp {
         let is_mine = stream.owner == self.nickname;
         painter.rect_filled(rect, CornerRadius::same(16), theme::CARD);
         let inner = rect.shrink(3.0);
-        if let Some(source) = self.mock.get(index) {
+        let frame = match &self.media {
+            // What others send comes from the network; my own is not echoed back.
+            Some(media) => stream.owner_id.and_then(|id| media.latest(id)),
+            None => self.mock.get(index).map(|source| source.frame()),
+        };
+        if let Some(frame) = frame {
             painter.add(video::shape(VideoCallback {
                 id: index,
-                frame: source.frame(),
+                frame,
                 rect: inner,
                 radius: 13.0,
             }));
+        } else if self.media.is_some() {
+            let text = if is_mine {
+                "Você está transmitindo"
+            } else {
+                "Aguardando o vídeo…"
+            };
+            painter.text(
+                inner.center(),
+                egui::Align2::CENTER_CENTER,
+                text,
+                egui::FontId::proportional(15.0),
+                theme::TEXT_DIM,
+            );
         }
         let is_focus = room.layout == RoomLayout::Focus && index == room.focus;
         let border = if is_focus || is_mine {

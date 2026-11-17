@@ -9,14 +9,7 @@ use eframe::egui_wgpu::{self, CallbackResources, CallbackTrait, ScreenDescriptor
 use eframe::wgpu;
 
 /// One decoded picture, planar I420.
-pub struct Frame {
-    pub seq: u64,
-    pub width: u32,
-    pub height: u32,
-    pub y: Vec<u8>,
-    pub u: Vec<u8>,
-    pub v: Vec<u8>,
-}
+pub use telinhas_media::Picture as Frame;
 
 const SHADER: &str = r#"
 struct Uniforms { size_px: vec2<f32>, radius_px: f32, _pad: f32 };

@@ -80,6 +80,7 @@ pub struct TelinhasApp {
     pub(crate) server: String,
     pub(crate) server_draft: String,
     pub(crate) net: Option<Handle>,
+    pub(crate) media: Option<telinhas_media::Media>,
     pub(crate) link: Link,
     /// A problem to show on the home screen (a wrong code, no server...).
     pub(crate) notice: Option<String>,
@@ -122,10 +123,28 @@ impl TelinhasApp {
         self.server = server.trim().to_owned();
         self.server_draft = self.server.clone();
         self.net = None;
+        self.media = None;
         if self.server.is_empty() {
             return;
         }
         let ctx = self.wake.clone();
+        let media_ctx = self.wake.clone();
+        // A server on this machine means a test: no STUN, no outside network.
+        let local = ["//127.0.0.1", "//localhost", "//[::1]"]
+            .iter()
+            .any(|host| self.server.contains(host));
+        self.media = Some(telinhas_media::Media::spawn(
+            if local {
+                telinhas_media::LinkConfig::loopback()
+            } else {
+                telinhas_media::LinkConfig::internet()
+            },
+            move || {
+                if let Some(ctx) = &media_ctx {
+                    ctx.request_repaint();
+                }
+            },
+        ));
         self.net = Some(telinhas_net::spawn(
             Settings {
                 server: self.server.clone(),
@@ -182,6 +201,7 @@ impl TelinhasApp {
             server: String::new(),
             server_draft: String::new(),
             net: None,
+            media: None,
             link: Link::Idle,
             notice: None,
             requests: Vec::new(),
@@ -249,6 +269,12 @@ impl TelinhasApp {
 
     /// Back to the home screen, whatever the reason.
     pub(crate) fn reset_room_state(&mut self) {
+        if let (Some(media), Some(room)) = (&self.media, &self.room) {
+            media.send(telinhas_media::Command::StopBroadcast);
+            for peer in room.participants.iter().filter_map(|p| p.peer_id) {
+                media.send(telinhas_media::Command::PeerLeft(peer));
+            }
+        }
         self.room = None;
         self.requests.clear();
         self.reconnecting = false;
@@ -560,5 +586,57 @@ mod tests {
             accept: true,
         });
         wait(&mut beto, "the room", |a| a.screen == Screen::Room);
+    }
+
+    #[test]
+    fn a_broadcast_reaches_the_other_app_as_real_video() {
+        let (_runtime, url) = server();
+        let mut ana = app("Ana");
+        ana.screen = Screen::Home;
+        ana.set_server(&url);
+        ana.enter_room("", true);
+        wait(&mut ana, "the room", |a| a.screen == Screen::Room);
+        let code = ana.room.as_ref().unwrap().code.clone();
+        let ana_id = ana.room.as_ref().unwrap().me_id().unwrap();
+
+        let mut beto = app("Beto");
+        beto.screen = Screen::Home;
+        beto.set_server(&url);
+        beto.enter_room(&code, false);
+        wait(&mut beto, "the room", |a| a.screen == Screen::Room);
+        wait(&mut ana, "Beto", |a| {
+            a.room.as_ref().is_some_and(|r| r.participants.len() == 2)
+        });
+
+        let mut draft = BroadcastDraft::new();
+        draft.clamp(&ana.sources);
+        ana.start_broadcast(&draft);
+        assert!(ana.room.as_ref().unwrap().broadcasting);
+
+        // Beto learns of the stream and then receives its pictures. Ana's app
+        // must keep polling too: it relays the negotiation.
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            ana.poll_net();
+            beto.poll_net();
+            let got = beto
+                .media
+                .as_ref()
+                .and_then(|m| m.latest(ana_id))
+                .is_some_and(|p| p.seq >= 3);
+            if got {
+                break;
+            }
+            assert!(Instant::now() < deadline, "no video arrived at Beto");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert_eq!(beto.room.as_ref().unwrap().streams.len(), 1);
+        frames(&mut beto, 3);
+
+        ana.room.as_mut().unwrap().broadcasting = false;
+        ana.media
+            .as_ref()
+            .unwrap()
+            .send(telinhas_media::Command::StopBroadcast);
     }
 }

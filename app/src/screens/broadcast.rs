@@ -108,8 +108,10 @@ impl TelinhasApp {
             room.streams[index] = info;
         } else {
             room.streams.push(info);
-            self.mock
-                .push(crate::mockvideo::MockSource::start(1280, 720, 30, 4));
+            if self.media.is_none() {
+                self.mock
+                    .push(crate::mockvideo::MockSource::start(1280, 720, 30, 4));
+            }
         }
         room.broadcasting = true;
         if let Some(net) = &self.net {
@@ -127,7 +129,41 @@ impl TelinhasApp {
                 ),
             });
         }
-        if draft.webcam && self.mock_webcam.is_none() {
+        if let Some(media) = &self.media {
+            use telinhas_media::{BroadcastSource, BroadcastSpec};
+            let source = match (self.sources.is_demo, draft.tab) {
+                (true, _) => BroadcastSource::Synthetic {
+                    width: 1280,
+                    height: 720,
+                },
+                (false, SourceTab::Screens) => self
+                    .sources
+                    .monitors
+                    .get(draft.monitor)
+                    .map_or(BroadcastSource::Monitor(0), |m| {
+                        BroadcastSource::Monitor(m.index)
+                    }),
+                (false, SourceTab::Windows) => match self.sources.windows.get(draft.window) {
+                    Some(w) => BroadcastSource::Window(w.handle),
+                    None => BroadcastSource::Monitor(0),
+                },
+            };
+            let viewers = room
+                .participants
+                .iter()
+                .filter(|p| !p.is_me)
+                .filter_map(|p| p.peer_id)
+                .collect();
+            media.send(telinhas_media::Command::StartBroadcast {
+                spec: BroadcastSpec::new(
+                    source,
+                    draft.fps,
+                    crate::model::target_kbps(width, height, draft.fps),
+                ),
+                viewers,
+            });
+        }
+        if draft.webcam && self.mock_webcam.is_none() && self.media.is_none() {
             self.mock_webcam = Some(crate::mockvideo::MockSource::start(640, 360, 24, 3));
         }
         self.show_toast(if switching {

@@ -12,6 +12,8 @@ workspace = true
 [features]
 # Keeps the console window of a Windows release build, to read logs.
 console = []
+# Hardware encoding (NVENC) through the FFmpeg libraries; see docs/PLANO-M3.md.
+ffmpeg = ["telinhas-media/ffmpeg"]
 
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "wayland", "x11", "persistence"] }
@@ -19,6 +21,7 @@ egui-phosphor = "0.14"
 egui_extras = { version = "0.37", default-features = false, features = ["svg"] }
 resvg = "0.45"
 telinhas-capture = { path = "../capture" }
+telinhas-media = { path = "../media" }
 telinhas-net = { path = "../net" }
 telinhas-protocol = { path = "../protocol" }
 

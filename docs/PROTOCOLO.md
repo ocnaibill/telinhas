@@ -101,7 +101,7 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
    - Se o administrador desliga a exigência (`set_approval` falso), todos os pedidos pendentes são aceitos na hora.
    - Se o administrador muda, os pedidos pendentes são reenviados ao novo (e também ao antigo, se ele reconectar).
    - Uma segunda conexão com o mesmo token substitui a primeira, que é encerrada.
-3. Depois de `room_joined`, cada par negocia WebRTC por `signal`. Quem tem o `peer_id` lexicograficamente menor envia a `offer`, para evitar colisão.
+3. Depois de `room_joined`, a negociação WebRTC vai por `signal`, e quem transmite envia a `offer` a cada participante (o espectador só responde com a `answer`), então não há colisão de ofertas. Um participante que entra depois recebe a oferta de quem já transmite. As descrições vão completas, com os candidatos ICE já coletados (sem trickle), então `ice` não é usado por enquanto.
 
 ## 7. Erros
 
