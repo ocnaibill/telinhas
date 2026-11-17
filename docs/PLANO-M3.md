@@ -174,6 +174,28 @@ O padrão passou a ser **0,5 para hardware** e 0,8 para software (que respeita o
 
 Moral para o desenho: o receptor precisa de um remontador que aceite quadros-chave grandes (uma tela de alta resolução parada gera quadros-chave de mais de 100 KB), e o diagnóstico `rx path:` fica no spike por ser o que localizou o problema.
 
+### Captura real com NVENC, Windows para Mac pela internet (1080p60, `--no-border`)
+
+Transmissor: monitor 0 (1920×1080) capturado, `h264_nvenc` pelo FFmpeg 9.0, teto de 8 Mbps, 60 s. Receptor: MacBook, 54 s.
+
+| Medida | Resultado |
+|--------|-----------|
+| Encoder | `h264_nvenc (FFmpeg) (hardware)`, sem o aviso de software |
+| Quadros | 3562 gerados em 60 s (59,4 por segundo), 3560 codificados (2 pulados) |
+| Receptor | **3259 decodificados em 54 s = 60,0 fps, 0 perdidos, 0 erros do decodificador** |
+| Ida e volta (transmissor) | **p50 83 ms, p95 97 ms**, máximo 273 ms |
+| Latência vista pelo Mac | p50 108,8 ms, p95 120 ms (os relógios das duas máquinas deixaram de diferir em segundos) |
+| Borda amarela | escondida (`access allowed`), confirmada a olho |
+| Metas | RNF-01 (≤ 300 ms) e RNF-04 (≥ 95% do fps) atendidas com folga; RNF-15 atendida (0 perda) |
+| Bitrate | média de 2,0 Mbps; começou em 0,76 Mbps e subiu junto com a estimativa do GCC, que levou cerca de 30 s para chegar de 1,5 a 8 Mbps |
+| Quadro-chave | o maior chegou a **246 KB** (cerca de 200 pacotes) |
+
+Os 210 quadros "descartados por atraso" do fim da rodada vêm de o receptor ter encerrado aos 55 s com o transmissor ainda rodando até 60 s: sem confirmações, o transmissor descarta, como projetado. Não é falha de rede.
+
+Dois achados de desenho:
+- **Os quadros-chave periódicos aparecem na latência.** A cada 5 s (o intervalo de segurança) o p95 sobe de cerca de 95 ms para 150 a 183 ms, e o máximo para 240 a 270 ms: é o quadro-chave de 240 KB saindo de uma vez. Quadros-chave sob demanda (PLI, DEC-44) e um intervalo mais longo reduziriam isso.
+- **A partida é lenta.** O teto do encoder segue a estimativa do GCC (metade dela, para NVENC), que começa em 1,5 Mbps e sobe uns 8% por segundo. Nos primeiros 30 s a qualidade fica limitada. Vale dar uma estimativa inicial maior ou uma sondagem de banda no início.
+
 **Pendente:** o pedido de quadro-chave pelo espectador (PLI). O `webrtc` não entrega o PLI ao transmissor por uma chamada simples; o exemplo oficial usa um interceptor próprio. Por enquanto o transmissor manda um quadro-chave de segurança a cada 5 s (`--keyframe-seconds`). **Teste com NVENC e captura real no Windows:** a fazer (precisa do FFmpeg no Windows, seção 2.7).
 
 **Para compilar no Windows (uma vez):**
