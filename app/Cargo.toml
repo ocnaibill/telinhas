@@ -13,6 +13,7 @@ workspace = true
 # Keeps the console window of a Windows release build, to read logs.
 console = []
 # Hardware encoding (NVENC) through the FFmpeg libraries; see docs/PLANO-M3.md.
+# Windows builds always include it (below); this is for other systems.
 ffmpeg = ["telinhas-media/ffmpeg"]
 
 [dependencies]
@@ -24,6 +25,12 @@ telinhas-capture = { path = "../capture" }
 telinhas-media = { path = "../media" }
 telinhas-net = { path = "../net" }
 telinhas-protocol = { path = "../protocol" }
+
+# The encoder is picked when a broadcast starts: hardware if it works, software
+# otherwise. On Windows the hardware code is always compiled in, which needs the
+# FFmpeg development files and libclang to build, and the FFmpeg DLLs to run.
+[target.'cfg(windows)'.dependencies]
+telinhas-media = { path = "../media", features = ["ffmpeg"] }
 
 # Embeds the icon in the Windows executable, so Explorer and the taskbar show it.
 [target.'cfg(windows)'.build-dependencies]
