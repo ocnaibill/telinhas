@@ -114,6 +114,19 @@ Com a área de trabalho **parada** (1 quadro novo em 30 s; o `measure` repete o 
 
 **Consequência:** o app não deve usar CBR. Deve usar qualidade constante com **teto de bitrate** (VBR com `-cq` e `-maxrate`), para que conteúdo fácil custe quase nada e conteúdo difícil fique limitado ao teto da predefinição. O comando `measure` ganhou o modo `capped:N:KBPS` para medir isso.
 
+### Tela parada e modo com teto (medido)
+
+| Situação | Modo | Média | Observação |
+|----------|------|-------|------------|
+| Tela parada, 1080p60 | `cq:23` | 0,87 Mbps | Alterna 41 kbps (quadros P) e 1,69 Mbps (o segundo do quadro-chave, a cada 2 s) |
+| Tela parada, 1080p60 | `capped:23:8000` | 0,64 Mbps | Alterna 75 kbps e 1,2 Mbps pelo mesmo motivo |
+| Conteúdo pesado, 1080p60 | `capped:23:8000` | **5,7 Mbps** | p95 de 8,0 Mbps, pico de 9,9 Mbps (cerca de 24% acima do teto); latência do encoder 2,1 ms |
+
+Leituras:
+- **O piso de uma tela parada é quase zero:** os quadros P custam cerca de 41 kbps. O que pesa é o **quadro-chave periódico** (cerca de 1,7 Mbit a cada 2 s). Com quadros-chave só **sob demanda** (espectador novo, pedido de PLI) e um periódico longo (por exemplo, a cada 10 s) como segurança, a média de uma tela parada cairia para algo como 0,2 Mbps.
+- **O modo com teto funciona:** não gasta enchimento na tela parada (o CBR gastava 8 Mbps) e segura o conteúdo pesado perto do teto, com a média abaixo dele (5,7 contra 8 Mbps).
+- **Planejamento do upload:** usar o teto com folga de 25% sobre o pico por segundo (os picos medidos foram de 17% a 24% acima do teto).
+
 Qualidade a olho de 1080p60 a 8 Mbps e de 720p30 a 3 Mbps (CBR, conteúdo pesado): a avaliar pelo mantenedor.
 
 ## 3. Passos
