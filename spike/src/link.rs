@@ -130,6 +130,7 @@ struct RxContext {
     units: StdSender<Unit>,
     /// Frame counters to echo back to the sender over the data channel.
     acks: Mutex<Option<UnboundedReceiver<u32>>>,
+    stats: Arc<Stats>,
 }
 
 struct Handler {
@@ -178,14 +179,19 @@ impl PeerConnectionEventHandler for Handler {
     async fn on_track(&self, track: Arc<dyn TrackRemote>) {
         let Some(rx) = &self.rx else { return };
         let units = rx.units.clone();
+        let stats = Arc::clone(&rx.stats);
         rx.runtime.spawn(Box::pin(async move {
-            let mut builder = SampleBuilder::new(64, H264Packet::default(), 90_000);
+            // A 1080p keyframe is hundreds of packets: the builder must be
+            // willing to wait for all of them before it gives up on a unit.
+            let mut builder = SampleBuilder::new(1024, H264Packet::default(), 90_000);
             while let Some(event) = track.poll().await {
                 let TrackRemoteEvent::OnRtpPacket(packet) = event else {
                     continue;
                 };
+                stats.diag.packets.fetch_add(1, Ordering::Relaxed);
                 builder.push(Instant::now(), packet);
                 while let Some(sample) = builder.pop(Instant::now()) {
+                    stats.diag.note_sample(sample.data.len());
                     let unit = Unit {
                         data: sample.data.to_vec(),
                         ready_at: Instant::now(),
@@ -507,6 +513,7 @@ impl RecvLink {
             runtime: Arc::clone(&runtime),
             units: units_tx,
             acks: Mutex::new(Some(acks_rx)),
+            stats: Arc::clone(&stats),
         };
         // The receiver uses the same interceptors so TWCC feedback flows back.
         let estimator = ReportingEstimator {

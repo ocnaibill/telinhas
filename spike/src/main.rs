@@ -27,6 +27,15 @@ enum Command {
         /// 0 to 5: how noisy the picture is. Higher needs more bandwidth.
         #[arg(long, default_value_t = 3)]
         noise: u8,
+        #[arg(long, default_value_t = 1280)]
+        width: usize,
+        #[arg(long, default_value_t = 720)]
+        height: usize,
+        #[arg(long, default_value_t = 30)]
+        fps: u32,
+        /// `auto`, `hardware` or `software`.
+        #[arg(long, default_value = "auto")]
+        backend: String,
     },
     /// Sends the synthetic stream to the other participant of a room.
     Send {
@@ -196,7 +205,14 @@ impl RoomArgs {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     match Cli::parse().command {
-        Command::Loopback { seconds, noise } => loopback(seconds, noise).await,
+        Command::Loopback {
+            seconds,
+            noise,
+            width,
+            height,
+            fps,
+            backend,
+        } => loopback(seconds, noise, width, height, fps, backend).await,
         Command::Send {
             room,
             width,
@@ -295,7 +311,14 @@ async fn main() -> Result<()> {
     }
 }
 
-async fn loopback(seconds: u64, noise: u8) -> Result<()> {
+async fn loopback(
+    seconds: u64,
+    noise: u8,
+    width: usize,
+    height: usize,
+    fps: u32,
+    backend: String,
+) -> Result<()> {
     let link = LinkConfig::loopback();
     let mut sender = SendLink::new(&link).await?;
     let mut receiver = RecvLink::new(&link).await?;
@@ -307,10 +330,16 @@ async fn loopback(seconds: u64, noise: u8) -> Result<()> {
     println!("connected");
     let cfg = StreamConfig {
         noise_level: noise,
+        width,
+        height,
+        fps,
+        backend,
+        max_bps: 8_000_000,
         ..StreamConfig::default()
     };
     run_sender(&sender, cfg, seconds, Some(&receiver)).await?;
     println!("receiver: {}", receiver.stats.report());
+    println!("          {}", receiver.stats.diag.line());
     Ok(())
 }
 
@@ -368,11 +397,14 @@ async fn recv(room: &RoomArgs) -> Result<()> {
     let mut tick = tokio::time::interval(Duration::from_secs(2));
     loop {
         tokio::select! {
-            _ = tick.tick() => println!(
-                "recv: {} | {}",
-                receiver.stats.report(),
-                receiver.stats.take_window()
-            ),
+            _ = tick.tick() => {
+                println!(
+                    "recv: {} | {}",
+                    receiver.stats.report(),
+                    receiver.stats.take_window()
+                );
+                println!("      {}", receiver.stats.diag.line());
+            }
             _ = tokio::time::sleep_until(deadline) => break,
             _ = tokio::signal::ctrl_c() => break,
         }

@@ -162,6 +162,8 @@ O restante do M3c, no Windows: confirmar o mesmo NVENC com a captura real.
 
 O padrão passou a ser **0,5 para hardware** e 0,8 para software (que respeita o teto com rigor). O software em loopback fica em cerca de 50 ms.
 
+**Primeiro teste no Windows (captura real, software, 1080p30):** a conexão e o envio funcionaram (351 quadros de monitor e 465 de janela enviados), o Windows respondeu **`border: asked to hide (access allowed)`** (a permissão de esconder a borda foi concedida e o pedido aceito) e o cursor também foi aceito. Mas o receptor decodificou **0 quadros** nas duas rodadas. Causa ainda desconhecida: tentei reproduzir em loopback com quadros-chave grandes de 1080p e não reproduzi. O receptor agora imprime a linha `rx path:` (pacotes RTP, unidades remontadas, decodificadas, erros do decodificador e o primeiro erro) para mostrar onde os quadros somem, e o limite do remontador de quadros subiu de 64 para 1024 pacotes.
+
 **Pendente:** o pedido de quadro-chave pelo espectador (PLI). O `webrtc` não entrega o PLI ao transmissor por uma chamada simples; o exemplo oficial usa um interceptor próprio. Por enquanto o transmissor manda um quadro-chave de segurança a cada 5 s (`--keyframe-seconds`). **Teste da captura real no Windows:** a fazer.
 
 **Para compilar no Windows (uma vez):**

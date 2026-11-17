@@ -1,6 +1,7 @@
 //! What the receiving side measured.
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 #[derive(Default)]
@@ -15,10 +16,59 @@ struct Inner {
     window_ms: Vec<f64>,
 }
 
+/// Where frames are lost on the receiving path, for when nothing shows up.
+#[derive(Default)]
+pub struct RxDiag {
+    /// RTP packets that reached the receiver.
+    pub packets: AtomicU64,
+    /// Complete access units the sample builder handed over.
+    pub samples: AtomicU64,
+    pub sample_bytes: AtomicU64,
+    pub largest_sample: AtomicU64,
+    /// Units the decoder turned into a picture.
+    pub decoded: AtomicU64,
+    /// Units the decoder accepted but did not turn into a picture yet.
+    pub no_picture: AtomicU64,
+    pub errors: AtomicU64,
+    first_error: Mutex<Option<String>>,
+}
+
+impl RxDiag {
+    pub fn note_error(&self, message: String) {
+        self.errors.fetch_add(1, Ordering::Relaxed);
+        self.first_error.lock().unwrap().get_or_insert(message);
+    }
+
+    pub fn note_sample(&self, bytes: usize) {
+        self.samples.fetch_add(1, Ordering::Relaxed);
+        self.sample_bytes.fetch_add(bytes as u64, Ordering::Relaxed);
+        self.largest_sample
+            .fetch_max(bytes as u64, Ordering::Relaxed);
+    }
+
+    pub fn line(&self) -> String {
+        let get = |c: &AtomicU64| c.load(Ordering::Relaxed);
+        let mut text = format!(
+            "rx path: rtp_packets={} units={} (largest {} B) decoded={} no_picture={} decoder_errors={}",
+            get(&self.packets),
+            get(&self.samples),
+            get(&self.largest_sample),
+            get(&self.decoded),
+            get(&self.no_picture),
+            get(&self.errors),
+        );
+        if let Some(first) = self.first_error.lock().unwrap().as_ref() {
+            text.push_str(&format!(" first_error={first:?}"));
+        }
+        text
+    }
+}
+
 /// Shared between the decoder thread and whoever prints the report.
 #[derive(Default)]
 pub struct Stats {
     inner: Mutex<Inner>,
+    pub diag: RxDiag,
 }
 
 #[derive(Debug, Clone)]

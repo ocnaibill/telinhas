@@ -274,9 +274,18 @@ pub fn spawn_decoder(
         while let Ok(unit) = units.recv() {
             let len = unit.data.len();
             // Early units may fail until the first keyframe arrives.
-            let Ok(Some(yuv)) = decoder.decode(&unit.data) else {
-                continue;
+            let yuv = match decoder.decode(&unit.data) {
+                Ok(Some(yuv)) => yuv,
+                Ok(None) => {
+                    stats.diag.no_picture.fetch_add(1, Ordering::Relaxed);
+                    continue;
+                }
+                Err(error) => {
+                    stats.diag.note_error(error.to_string());
+                    continue;
+                }
             };
+            stats.diag.decoded.fetch_add(1, Ordering::Relaxed);
             let (counter, captured) = read_stamp(&yuv);
             stats.record(counter, elapsed_ms(captured, now_micros()), len);
             if let Some(acks) = &acks {
