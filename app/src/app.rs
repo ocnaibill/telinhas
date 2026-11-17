@@ -35,9 +35,11 @@ pub(crate) struct HomeState {
     pub mode: EntryMode,
     pub require_approval: bool,
     pub preview_code: String,
-    /// Height both cards share: the taller one's, measured on the last frame.
-    pub card_height: f32,
-    /// What each card measured this frame, [create, join].
+    /// The height the content needs, button included, of the taller card.
+    pub target: f32,
+    /// What each card's content needed on the last frame, [create, join].
+    pub natural: [f32; 2],
+    /// Each card's full height as drawn, [create, join].
     pub measured: [f32; 2],
 }
 
@@ -92,7 +94,8 @@ impl TelinhasApp {
                 mode: EntryMode::Watching,
                 require_approval: false,
                 preview_code: preview_code(seed),
-                card_height: 0.0,
+                target: 0.0,
+                natural: [0.0; 2],
                 measured: [0.0; 2],
             },
             room: None,

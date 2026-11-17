@@ -54,17 +54,15 @@ impl TelinhasApp {
                         self.create_card(&mut columns[0]);
                         self.join_card(&mut columns[1]);
                     });
-                    // Both cards take the height of the taller one next frame.
-                    self.home.card_height = self.home.measured[0].max(self.home.measured[1]);
+                    // Both cards fill up to the taller one's content next frame.
+                    self.home.target = self.home.natural[0].max(self.home.natural[1]);
                 });
             });
         });
     }
 
     fn create_card(&mut self, ui: &mut egui::Ui) {
-        let min_height = (self.home.card_height - 32.0).max(0.0);
         let shown = theme::card().show(ui, |ui| {
-            ui.set_min_height(min_height);
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(theme::icons::PLUS)
@@ -109,27 +107,28 @@ impl TelinhasApp {
                     theme::toggle(ui, &mut self.home.require_approval);
                 });
             });
-            // The button sits at the bottom of the card, level with the other card's.
-            ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
-                if theme::wide_primary_button(
-                    ui,
-                    format!("{}  Criar sala", theme::icons::LIGHTNING),
-                    ui.available_width(),
-                )
-                .clicked()
-                {
-                    let code = self.home.preview_code.clone();
-                    self.enter_room(&code, true);
-                }
-            });
+            // The button sits at the bottom, level with the other card's: the
+            // slack of the shorter card goes above it.
+            ui.add_space(10.0);
+            let slack = (self.home.target - self.home.natural[0]).max(0.0);
+            ui.add_space(slack);
+            if theme::wide_primary_button(
+                ui,
+                format!("{}  Criar sala", theme::icons::LIGHTNING),
+                ui.available_width(),
+            )
+            .clicked()
+            {
+                let code = self.home.preview_code.clone();
+                self.enter_room(&code, true);
+            }
+            self.home.natural[0] = ui.min_rect().height() - slack;
         });
         self.home.measured[0] = shown.response.rect.height();
     }
 
     fn join_card(&mut self, ui: &mut egui::Ui) {
-        let min_height = (self.home.card_height - 32.0).max(0.0);
         let shown = theme::card().show(ui, |ui| {
-            ui.set_min_height(min_height);
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(theme::icons::SIGN_IN)
@@ -188,19 +187,20 @@ impl TelinhasApp {
             let ready = looks_like_code(&self.home.join_code);
             let mut enter =
                 response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && ready;
-            // The button sits at the bottom of the card, level with the other card's.
-            ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
-                enter |= ui
-                    .add_enabled_ui(ready, |ui| {
-                        theme::success_button(
-                            ui,
-                            format!("{}  Entrar na sala", theme::icons::BROADCAST),
-                            ui.available_width(),
-                        )
-                    })
-                    .inner
-                    .clicked();
-            });
+            ui.add_space(10.0);
+            let slack = (self.home.target - self.home.natural[1]).max(0.0);
+            ui.add_space(slack);
+            enter |= ui
+                .add_enabled_ui(ready, |ui| {
+                    theme::success_button(
+                        ui,
+                        format!("{}  Entrar na sala", theme::icons::BROADCAST),
+                        ui.available_width(),
+                    )
+                })
+                .inner
+                .clicked();
+            self.home.natural[1] = ui.min_rect().height() - slack;
             if enter && ready {
                 let code = self.home.join_code.to_uppercase();
                 self.enter_room(&code, false);
