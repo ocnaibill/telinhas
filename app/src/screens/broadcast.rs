@@ -87,7 +87,10 @@ impl TelinhasApp {
         let Some(room) = self.room.as_mut() else {
             return;
         };
+        let title_for_meta = title.clone();
         let info = StreamInfo {
+            owner_id: room.me_id(),
+            stream_id: "screen".to_owned(),
             owner: me.clone(),
             title,
             width,
@@ -109,6 +112,21 @@ impl TelinhasApp {
                 .push(crate::mockvideo::MockSource::start(1280, 720, 30, 4));
         }
         room.broadcasting = true;
+        if let Some(net) = &self.net {
+            net.send(telinhas_net::Command::AnnounceStream {
+                stream_id: "screen".to_owned(),
+                kind: telinhas_protocol::StreamKind::Screen,
+                live: true,
+                meta: crate::model::stream_meta(
+                    &title_for_meta,
+                    width,
+                    height,
+                    draft.fps,
+                    !software,
+                    draft.webcam,
+                ),
+            });
+        }
         if draft.webcam && self.mock_webcam.is_none() {
             self.mock_webcam = Some(crate::mockvideo::MockSource::start(640, 360, 24, 3));
         }
@@ -401,7 +419,12 @@ impl TelinhasApp {
     // ----- join request (RF-19) -----------------------------------------------------------
 
     pub(crate) fn join_request_popup(&mut self, ctx: &egui::Context, room: &mut Room) {
-        let Some(name) = self.sim.pending_join.clone() else {
+        let real = self.requests.first().cloned();
+        let Some(name) = real
+            .as_ref()
+            .map(|r| r.nickname.clone())
+            .or_else(|| self.sim.pending_join.clone())
+        else {
             return;
         };
         if !room.i_am_admin() {
@@ -449,9 +472,21 @@ impl TelinhasApp {
                         });
                     });
             });
+        if let (Some(accept), Some(request)) = (decision, real) {
+            self.requests.remove(0);
+            self.send(telinhas_net::Command::ApprovalDecision {
+                request_id: request.request_id,
+                accept,
+            });
+            if !accept {
+                self.show_toast(format!("Pedido de {name} recusado"));
+            }
+            return;
+        }
         match decision {
             Some(true) => {
                 room.participants.push(Participant {
+                    peer_id: None,
                     name: name.clone(),
                     admin: false,
                     latency_ms: 28,

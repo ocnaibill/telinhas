@@ -67,6 +67,7 @@ impl TelinhasApp {
                 if submit && valid {
                     self.nickname = self.nick_draft.trim().to_owned();
                     self.nick_draft = self.nickname.clone();
+                    self.send(telinhas_net::Command::SetNickname(self.nickname.clone()));
                     done = true;
                 }
                 if !valid && !self.nick_draft.is_empty() {

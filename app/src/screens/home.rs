@@ -2,7 +2,7 @@
 
 use eframe::egui::{self, Align, Color32, Layout, RichText, Sense, Vec2};
 
-use crate::app::{Modal, TelinhasApp};
+use crate::app::{Link, Modal, TelinhasApp};
 use crate::logo;
 use crate::model::{EntryMode, looks_like_code};
 use crate::theme;
@@ -47,7 +47,20 @@ impl TelinhasApp {
                     )
                     .color(theme::TEXT_DIM),
                 );
-                ui.add_space(28.0);
+                ui.add_space(20.0);
+                if let Some(text) = self.notice.clone() {
+                    egui::Frame::new()
+                        .fill(theme::AMBER_DIM)
+                        .corner_radius(10)
+                        .inner_margin(egui::Margin::symmetric(14, 8))
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new(format!("{}  {text}", theme::icons::WARNING))
+                                    .color(theme::AMBER),
+                            );
+                        });
+                }
+                ui.add_space(8.0);
                 let width = ui.available_width().min(940.0);
                 ui.allocate_ui(Vec2::new(width, 0.0), |ui| {
                     ui.columns(2, |columns| {
@@ -57,8 +70,61 @@ impl TelinhasApp {
                     // Both cards fill up to the taller one's content next frame.
                     self.home.target = self.home.natural[0].max(self.home.natural[1]);
                 });
+                ui.add_space(24.0);
+                self.server_row(ui);
             });
         });
+        self.link_overlay(&ui.ctx().clone());
+    }
+
+    /// The signaling server this app talks to. Empty keeps the demonstration.
+    fn server_row(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.add_space(((ui.available_width() - 520.0) / 2.0).max(0.0));
+            ui.label(RichText::new("Servidor").small().color(theme::TEXT_FAINT));
+            let response = egui::TextEdit::singleline(&mut self.server_draft)
+                .hint_text("wss://exemplo.com/ws (vazio: modo demonstração)")
+                .desired_width(360.0)
+                .show(ui)
+                .response;
+            let changed = self.server_draft.trim() != self.server;
+            if (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+                || (ui
+                    .add_enabled(changed, egui::Button::new("Aplicar"))
+                    .clicked())
+            {
+                let value = self.server_draft.clone();
+                self.set_server(&value);
+                self.notice = None;
+            }
+            if self.net.is_none() {
+                ui.label(RichText::new("demonstração").small().color(theme::AMBER));
+            }
+        });
+    }
+
+    /// While connecting or waiting for the administrator's answer.
+    fn link_overlay(&mut self, ctx: &egui::Context) {
+        let text = match self.link {
+            Link::Idle => return,
+            Link::Connecting => "Conectando…",
+            Link::WaitingApproval => "Aguardando o administrador aceitar sua entrada…",
+        };
+        let mut cancel = false;
+        egui::Modal::new(theme::id("link_modal")).show(ctx, |ui| {
+            ui.set_width(340.0);
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new(text).strong());
+            });
+            ui.add_space(10.0);
+            if theme::secondary_button(ui, "Cancelar").clicked() {
+                cancel = true;
+            }
+        });
+        if cancel {
+            self.leave_room();
+        }
     }
 
     fn create_card(&mut self, ui: &mut egui::Ui) {
@@ -80,18 +146,19 @@ impl TelinhasApp {
                     ui.set_width(ui.available_width());
                     theme::section_title(ui, "Código da sala");
                     ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new(&self.home.preview_code)
-                                .size(24.0)
-                                .monospace()
-                                .strong(),
-                        );
+                        let code = if self.net.is_some() {
+                            "XXXX-XXXX"
+                        } else {
+                            self.home.preview_code.as_str()
+                        };
+                        ui.label(RichText::new(code).size(24.0).monospace().strong());
                     });
-                    ui.label(
-                        RichText::new("Expira 5 min depois que todos saírem")
-                            .small()
-                            .color(theme::TEXT_FAINT),
-                    );
+                    let hint = if self.net.is_some() {
+                        "O código aparece quando a sala é criada"
+                    } else {
+                        "Expira 5 min depois que todos saírem"
+                    };
+                    ui.label(RichText::new(hint).small().color(theme::TEXT_FAINT));
                 });
             ui.add_space(16.0);
             ui.horizontal(|ui| {

@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 
+use telinhas_net::{Command, Handle, Settings};
+
 use crate::mockvideo::MockSource;
 use crate::model::{
     BroadcastDraft, EntryMode, Room, Screen, Sources, preview_code, valid_nickname,
@@ -13,6 +15,7 @@ use crate::theme;
 use crate::video::VideoGpu;
 
 pub(crate) const NICKNAME_KEY: &str = "nickname";
+pub(crate) const SERVER_KEY: &str = "server";
 
 pub(crate) enum Modal {
     None,
@@ -22,6 +25,22 @@ pub(crate) enum Modal {
 
 /// Switches that make the interface show states it cannot reach on its own
 /// yet (a join request, a dropped connection, software encoding).
+/// Where we are on the way into a room, before the room screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Link {
+    #[default]
+    Idle,
+    Connecting,
+    WaitingApproval,
+}
+
+/// A person asking to come in, for the admin to answer (RF-19).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct JoinRequest {
+    pub request_id: String,
+    pub nickname: String,
+}
+
 #[derive(Default)]
 pub(crate) struct Sim {
     pub pending_join: Option<String>,
@@ -57,6 +76,17 @@ pub struct TelinhasApp {
     pub(crate) mock_webcam: Option<MockSource>,
     pub(crate) toast: Option<(String, Instant)>,
     pub(crate) started: Instant,
+    /// Address of the signaling server; empty means demonstration mode.
+    pub(crate) server: String,
+    pub(crate) server_draft: String,
+    pub(crate) net: Option<Handle>,
+    pub(crate) link: Link,
+    /// A problem to show on the home screen (a wrong code, no server...).
+    pub(crate) notice: Option<String>,
+    pub(crate) requests: Vec<JoinRequest>,
+    /// The connection dropped inside the room and the client is retrying.
+    pub(crate) reconnecting: bool,
+    pub(crate) wake: Option<egui::Context>,
 }
 
 impl TelinhasApp {
@@ -80,7 +110,44 @@ impl TelinhasApp {
                 .filter(|n| valid_nickname(n))
                 .unwrap_or_default()
         };
-        Self::build(nickname, Sources::load())
+        let server = server_setting(cc.storage);
+        let mut app = Self::build(nickname, Sources::load());
+        app.wake = Some(cc.egui_ctx.clone());
+        app.set_server(&server);
+        app
+    }
+
+    /// Points the client at a signaling server. Empty means demonstration mode.
+    pub(crate) fn set_server(&mut self, server: &str) {
+        self.server = server.trim().to_owned();
+        self.server_draft = self.server.clone();
+        self.net = None;
+        if self.server.is_empty() {
+            return;
+        }
+        let ctx = self.wake.clone();
+        self.net = Some(telinhas_net::spawn(
+            Settings {
+                server: self.server.clone(),
+                nickname: self.nickname.clone(),
+            },
+            move || {
+                if let Some(ctx) = &ctx {
+                    ctx.request_repaint();
+                }
+            },
+        ));
+    }
+
+    /// Whether the room is the made-up one of the demonstration.
+    pub(crate) fn is_demo(&self) -> bool {
+        self.net.is_none()
+    }
+
+    pub(crate) fn send(&self, command: Command) {
+        if let Some(net) = &self.net {
+            net.send(command);
+        }
     }
 
     fn build(nickname: String, sources: Sources) -> Self {
@@ -112,6 +179,14 @@ impl TelinhasApp {
             mock_webcam: None,
             toast: None,
             started: Instant::now(),
+            server: String::new(),
+            server_draft: String::new(),
+            net: None,
+            link: Link::Idle,
+            notice: None,
+            requests: Vec::new(),
+            reconnecting: false,
+            wake: None,
         }
     }
 
@@ -120,7 +195,22 @@ impl TelinhasApp {
     }
 
     /// Enters a test room, with a few people already in it.
+    /// Create or join: through the server when there is one, otherwise the
+    /// demonstration room.
     pub(crate) fn enter_room(&mut self, code: &str, create: bool) {
+        if self.net.is_some() {
+            let command = if create {
+                Command::CreateRoom {
+                    require_approval: self.home.require_approval,
+                }
+            } else {
+                Command::JoinRoom {
+                    code: code.to_owned(),
+                }
+            };
+            self.start_connecting(command);
+            return;
+        }
         let mut room = Room::demo(code, &self.nickname);
         if create {
             // A new room starts with only me, as its admin.
@@ -151,7 +241,18 @@ impl TelinhasApp {
     }
 
     pub(crate) fn leave_room(&mut self) {
+        if self.net.is_some() {
+            self.send(Command::Leave);
+        }
+        self.reset_room_state();
+    }
+
+    /// Back to the home screen, whatever the reason.
+    pub(crate) fn reset_room_state(&mut self) {
         self.room = None;
+        self.requests.clear();
+        self.reconnecting = false;
+        self.link = Link::Idle;
         self.mock.clear();
         self.mock_webcam = None;
         self.modal = Modal::None;
@@ -163,6 +264,7 @@ impl TelinhasApp {
 impl eframe::App for TelinhasApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.poll_net();
         // The room has moving pictures and live numbers.
         if self.screen == Screen::Room {
             ctx.request_repaint();
@@ -182,7 +284,29 @@ impl eframe::App for TelinhasApp {
         if valid_nickname(&self.nickname) {
             storage.set_string(NICKNAME_KEY, self.nickname.clone());
         }
+        storage.set_string(SERVER_KEY, self.server.clone());
     }
+}
+
+/// The server address: `--server URL`, then `TELINHAS_SERVER`, then what was
+/// saved last time.
+fn server_setting(storage: Option<&dyn eframe::Storage>) -> String {
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        if arg == "--server"
+            && let Some(value) = args.next()
+        {
+            return value;
+        }
+    }
+    if let Ok(value) = std::env::var("TELINHAS_SERVER")
+        && !value.trim().is_empty()
+    {
+        return value;
+    }
+    storage
+        .and_then(|s| s.get_string(SERVER_KEY))
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -323,5 +447,118 @@ mod tests {
         assert_eq!(app.screen, Screen::Home);
         assert!(app.room.is_none());
         assert!(app.mock.is_empty());
+    }
+
+    // ----- the signaling client --------------------------------------------------------
+
+    /// A real server in this process, on its own runtime.
+    fn server() -> (tokio::runtime::Runtime, String) {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let url = runtime.block_on(async {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            tokio::spawn(telinhas_signaling::serve(
+                listener,
+                telinhas_signaling::Hub::new(telinhas_signaling::Config::default()),
+            ));
+            format!("ws://{addr}/ws")
+        });
+        (runtime, url)
+    }
+
+    /// Polls the app until the condition holds, or fails after a few seconds.
+    fn wait(app: &mut TelinhasApp, what: &str, done: impl Fn(&TelinhasApp) -> bool) {
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            app.poll_net();
+            if done(app) {
+                return;
+            }
+            assert!(Instant::now() < deadline, "timed out waiting for: {what}");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn without_a_server_the_app_stays_in_demonstration() {
+        let mut app = app("Ana");
+        assert!(app.is_demo());
+        app.screen = Screen::Home;
+        app.enter_room("ABCD-EFGH", true);
+        assert_eq!(app.screen, Screen::Room);
+    }
+
+    #[test]
+    fn a_wrong_code_shows_a_notice_on_the_home_screen() {
+        let (_runtime, url) = server();
+        let mut app = app("Ana");
+        app.screen = Screen::Home;
+        app.set_server(&url);
+        app.enter_room("ABCD-EFGH", false);
+        assert_eq!(app.link, Link::Connecting);
+        wait(&mut app, "a notice", |a| a.notice.is_some());
+        assert_eq!(app.screen, Screen::Home);
+        assert_eq!(app.link, Link::Idle);
+        frames(&mut app, 2);
+    }
+
+    #[test]
+    fn two_apps_meet_in_a_room_and_see_each_other() {
+        let (_runtime, url) = server();
+        let mut ana = app("Ana");
+        ana.screen = Screen::Home;
+        ana.set_server(&url);
+        ana.enter_room("", true);
+        wait(&mut ana, "the room", |a| a.screen == Screen::Room);
+        let code = ana.room.as_ref().unwrap().code.clone();
+        assert!(ana.room.as_ref().unwrap().i_am_admin());
+
+        let mut beto = app("Beto");
+        beto.screen = Screen::Home;
+        beto.set_server(&url);
+        beto.enter_room(&code, false);
+        wait(&mut beto, "the room", |a| a.screen == Screen::Room);
+        assert_eq!(beto.room.as_ref().unwrap().participants.len(), 2);
+        assert!(!beto.room.as_ref().unwrap().i_am_admin());
+
+        wait(&mut ana, "Beto", |a| {
+            a.room.as_ref().is_some_and(|r| r.participants.len() == 2)
+        });
+        frames(&mut ana, 3);
+        frames(&mut beto, 3);
+
+        beto.leave_room();
+        assert!(beto.room.is_none());
+        wait(&mut ana, "Beto leaving", |a| {
+            a.room.as_ref().is_some_and(|r| r.participants.len() == 1)
+        });
+    }
+
+    #[test]
+    fn the_admin_answers_a_join_request() {
+        let (_runtime, url) = server();
+        let mut ana = app("Ana");
+        ana.screen = Screen::Home;
+        ana.home.require_approval = true;
+        ana.set_server(&url);
+        ana.enter_room("", true);
+        wait(&mut ana, "the room", |a| a.screen == Screen::Room);
+        let code = ana.room.as_ref().unwrap().code.clone();
+
+        let mut beto = app("Beto");
+        beto.screen = Screen::Home;
+        beto.set_server(&url);
+        beto.enter_room(&code, false);
+        wait(&mut beto, "waiting", |a| a.link == Link::WaitingApproval);
+        wait(&mut ana, "the request", |a| !a.requests.is_empty());
+        frames(&mut ana, 2);
+
+        let id = ana.requests[0].request_id.clone();
+        ana.requests.remove(0);
+        ana.send(Command::ApprovalDecision {
+            request_id: id,
+            accept: true,
+        });
+        wait(&mut beto, "the room", |a| a.screen == Screen::Room);
     }
 }

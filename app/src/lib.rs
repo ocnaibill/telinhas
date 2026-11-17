@@ -4,6 +4,7 @@ mod app;
 mod logo;
 mod mockvideo;
 mod model;
+mod net_events;
 mod screens;
 mod theme;
 mod video;

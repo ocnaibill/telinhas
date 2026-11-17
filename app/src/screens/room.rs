@@ -68,6 +68,12 @@ impl TelinhasApp {
                 }
                 room.focus = 0;
             }
+            self.send(telinhas_net::Command::AnnounceStream {
+                stream_id: "screen".to_owned(),
+                kind: telinhas_protocol::StreamKind::Screen,
+                live: false,
+                meta: telinhas_protocol::Value::Null,
+            });
             self.show_toast("Transmissão encerrada");
         }
         self.room = Some(room);
@@ -103,6 +109,13 @@ impl TelinhasApp {
                             theme::AMBER_DIM,
                         )
                         .on_hover_text("Você aprova as entradas e passa o papel se sair");
+                        if !self.is_demo() {
+                            let mut on = room.require_approval;
+                            if theme::toggle(ui, &mut on).changed() {
+                                self.send(telinhas_net::Command::SetApproval(on));
+                            }
+                            ui.label(RichText::new("Aprovar entradas").small().color(theme::TEXT_DIM));
+                        }
                     }
                     let latency = room.average_latency() as f32 + (time * 1.7).sin() * 2.0;
                     theme::pill(
@@ -153,7 +166,9 @@ impl TelinhasApp {
                     }
 
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        self.sim_menu(ui, room);
+                        if self.is_demo() {
+                            self.sim_menu(ui, room);
+                        }
                         let mut layout = room.layout;
                         if theme::segmented(
                             ui,
@@ -183,6 +198,7 @@ impl TelinhasApp {
             if ui.button("Entram mais 3 pessoas").clicked() {
                 for name in ["Rafa", "Duda", "Gui"] {
                     room.participants.push(crate::model::Participant {
+                        peer_id: None,
                         name: name.to_owned(),
                         admin: false,
                         latency_ms: 25,
@@ -204,7 +220,8 @@ impl TelinhasApp {
 
     fn banners(&mut self, ui: &mut egui::Ui, room: &Room) {
         let software = room.broadcasting && self.sim.software_encoder;
-        if !self.sim.reconnecting && !software {
+        let reconnecting = self.sim.reconnecting || self.reconnecting;
+        if !reconnecting && !software {
             return;
         }
         egui::Panel::top("banners")
@@ -215,7 +232,7 @@ impl TelinhasApp {
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    if self.sim.reconnecting {
+                    if reconnecting {
                         ui.spinner();
                         ui.label(
                             RichText::new("Reconectando à sala. Você volta com o mesmo código, sem perder o lugar.")
@@ -733,6 +750,8 @@ fn participant_row(
                 ui.label(RichText::new("reconectando…").small().color(theme::AMBER));
             } else if p.is_me {
                 ui.label(RichText::new("assistindo").small().color(theme::TEXT_FAINT));
+            } else if p.latency_ms == 0 && p.peer_id.is_some() {
+                ui.label(RichText::new("—").small().color(theme::TEXT_FAINT));
             } else {
                 let ms = p.latency_ms as f32 + (time * 1.3 + p.name.len() as f32).sin() * 2.0;
                 ui.label(

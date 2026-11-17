@@ -2,7 +2,7 @@
 //! the server and the clients share one definition.
 
 use serde::{Deserialize, Serialize};
-pub use serde_json::Value;
+pub use serde_json::{Map, Value};
 use uuid::Uuid;
 
 pub const PROTOCOL_VERSION: u32 = 1;

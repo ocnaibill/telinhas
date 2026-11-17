@@ -2,6 +2,8 @@
 //! media and capture layers will fill the same types later.
 
 use telinhas_capture as capture;
+use telinhas_net::RoomSnapshot;
+use telinhas_protocol::{Map, PeerId, PeerInfo, StreamKind, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
@@ -39,8 +41,11 @@ pub enum ConnectionState {
 
 #[derive(Debug, Clone)]
 pub struct Participant {
+    /// The server's id; `None` for the made-up people of the demo.
+    pub peer_id: Option<PeerId>,
     pub name: String,
     pub admin: bool,
+    /// Zero while not measured yet.
     pub latency_ms: u32,
     pub state: ConnectionState,
     pub is_me: bool,
@@ -48,6 +53,9 @@ pub struct Participant {
 
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
+    /// The server's id for who streams, and the stream's own id.
+    pub owner_id: Option<PeerId>,
+    pub stream_id: String,
     pub owner: String,
     /// What is being shared, such as a program or a screen.
     pub title: String,
@@ -81,6 +89,10 @@ impl Room {
         self.participants.iter().find(|p| p.is_me)
     }
 
+    pub fn me_id(&self) -> Option<PeerId> {
+        self.me().and_then(|p| p.peer_id)
+    }
+
     pub fn i_am_admin(&self) -> bool {
         self.me().is_some_and(|p| p.admin)
     }
@@ -96,16 +108,115 @@ impl Room {
             .filter(|p| !p.is_me && p.state == ConnectionState::Connected)
             .map(|p| p.latency_ms)
             .collect();
-        if others.is_empty() {
+        if others.is_empty() || others.iter().all(|ms| *ms == 0) {
             0
         } else {
             others.iter().sum::<u32>() / others.len() as u32
         }
     }
 
+    /// The room as the server described it.
+    pub fn from_snapshot(snapshot: &RoomSnapshot) -> Self {
+        let person = |info: &PeerInfo, is_me: bool| Participant {
+            peer_id: Some(info.peer_id),
+            name: info.nickname.clone(),
+            admin: info.peer_id == snapshot.admin,
+            latency_ms: 0,
+            state: match info.state {
+                telinhas_protocol::ConnectionState::Connected => ConnectionState::Connected,
+                telinhas_protocol::ConnectionState::Reconnecting => ConnectionState::Reconnecting,
+            },
+            is_me,
+        };
+        let mut participants = vec![person(&snapshot.you, true)];
+        participants.extend(snapshot.peers.iter().map(|p| person(p, false)));
+        let mut room = Self {
+            code: snapshot.code.clone(),
+            require_approval: snapshot.require_approval,
+            participants,
+            streams: Vec::new(),
+            layout: Layout::Grid,
+            focus: 0,
+            broadcasting: false,
+            mic_on: false,
+            camera_on: false,
+        };
+        for stream in &snapshot.streams {
+            room.apply_stream(
+                stream.from,
+                &stream.stream_id,
+                stream.kind,
+                true,
+                &stream.meta,
+            );
+        }
+        room
+    }
+
+    pub fn name_of(&self, id: PeerId) -> Option<&str> {
+        self.participants
+            .iter()
+            .find(|p| p.peer_id == Some(id))
+            .map(|p| p.name.as_str())
+    }
+
+    /// A stream appeared, changed or ended. A webcam is not a tile of its own:
+    /// it marks its owner's screen as having a picture-in-picture.
+    pub fn apply_stream(
+        &mut self,
+        from: PeerId,
+        stream_id: &str,
+        kind: StreamKind,
+        live: bool,
+        meta: &Value,
+    ) {
+        let owner = self.name_of(from).unwrap_or("?").to_owned();
+        match kind {
+            StreamKind::Webcam => {
+                for stream in self.streams.iter_mut().filter(|s| s.owner_id == Some(from)) {
+                    stream.has_webcam = live;
+                }
+            }
+            StreamKind::Screen => {
+                self.streams
+                    .retain(|s| !(s.owner_id == Some(from) && s.stream_id == stream_id));
+                if live {
+                    let number = |key: &str, default: u64| {
+                        meta.get(key).and_then(Value::as_u64).unwrap_or(default) as u32
+                    };
+                    self.streams.push(StreamInfo {
+                        owner_id: Some(from),
+                        stream_id: stream_id.to_owned(),
+                        owner,
+                        title: meta
+                            .get("title")
+                            .and_then(Value::as_str)
+                            .unwrap_or("Tela")
+                            .to_owned(),
+                        width: number("width", 1920),
+                        height: number("height", 1080),
+                        fps: number("fps", 30),
+                        hardware: meta
+                            .get("hardware")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true),
+                        volume: 0.8,
+                        visible: true,
+                        quality: Quality::Original,
+                        has_webcam: meta.get("webcam").and_then(Value::as_bool).unwrap_or(false),
+                    });
+                }
+                if self.focus >= self.streams.len() {
+                    self.focus = 0;
+                }
+            }
+        }
+    }
+
     /// A room with a few people and streams, for trying the interface.
     pub fn demo(code: &str, my_name: &str) -> Self {
         let person = |name: &str, admin: bool, latency_ms: u32, is_me: bool| Participant {
+            peer_id: None,
             name: name.to_owned(),
             admin,
             latency_ms,
@@ -113,6 +224,8 @@ impl Room {
             is_me,
         };
         let stream = |owner: &str, title: &str, width, height, fps, hardware, webcam| StreamInfo {
+            owner_id: None,
+            stream_id: "screen".to_owned(),
             owner: owner.to_owned(),
             title: title.to_owned(),
             width,
@@ -405,6 +518,25 @@ impl BroadcastDraft {
                 .is_some_and(|w| is_browser(&w.process)),
         };
     }
+}
+
+/// What a stream announces about itself, for the others to draw it.
+pub fn stream_meta(
+    title: &str,
+    width: u32,
+    height: u32,
+    fps: u32,
+    hardware: bool,
+    webcam: bool,
+) -> Value {
+    let mut map = Map::new();
+    map.insert("title".to_owned(), Value::from(title));
+    map.insert("width".to_owned(), Value::from(width));
+    map.insert("height".to_owned(), Value::from(height));
+    map.insert("fps".to_owned(), Value::from(fps));
+    map.insert("hardware".to_owned(), Value::from(hardware));
+    map.insert("webcam".to_owned(), Value::from(webcam));
+    Value::Object(map)
 }
 
 #[cfg(test)]

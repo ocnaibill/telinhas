@@ -4559,6 +4559,10 @@ dependencies = [
  "egui_extras",
  "resvg",
  "telinhas-capture",
+ "telinhas-net",
+ "telinhas-protocol",
+ "telinhas-signaling",
+ "tokio",
  "winresource",
 ]
 
