@@ -4579,6 +4579,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "telinhas-net"
+version = "0.0.0"
+dependencies = [
+ "futures-util",
+ "rand 0.10.4",
+ "rustls",
+ "telinhas-protocol",
+ "telinhas-signaling",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+]
+
+[[package]]
+name = "telinhas-protocol"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "telinhas-signaling"
 version = "0.0.0"
 dependencies = [
@@ -4587,6 +4609,7 @@ dependencies = [
  "rand 0.10.4",
  "serde",
  "serde_json",
+ "telinhas-protocol",
  "tokio",
  "tokio-tungstenite 0.30.0",
  "uuid",

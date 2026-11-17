@@ -1,0 +1,15 @@
+[package]
+name = "telinhas-protocol"
+description = "Messages of the Telinhas signaling protocol, shared by the server and the clients"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+uuid = { version = "1.29.2", features = ["serde"] }

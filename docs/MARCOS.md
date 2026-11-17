@@ -42,6 +42,14 @@ Convenção: **RF** são os requisitos funcionais e **RNF** os não funcionais (
 
 ## M4 — Sala completa e interface principal
 
+Dividido em etapas (DEC-61 escolheu o egui; o spike M4a passou):
+
+- **M4a** — spike de vídeo no egui: concluído, `docs/UI-BIBLIOTECA.md`.
+- **M4b** — o app com tema, apelido, início, sala, modal de transmissão e os estados que faltavam, com dados de teste: concluído e aprovado pelo mantenedor.
+- **M4c** — ligar o app à sinalização: criar e entrar, aprovação, administrador, participantes, reconexão. Em andamento: o crate `telinhas-net` (cliente de sinalização) está pronto e testado contra o servidor real.
+- **M4d** — vídeo real recebido: do `webrtc` ao decodificador e aos cartões.
+- **M4e** — transmitir a partir do modal, com opções de resolução e FPS vindas do hardware e da fonte (RF-05, RF-22).
+
 - Interface principal única (DEC-20), escolhida a biblioteca de UI com as telas desenhadas (DEC-40).
 - Início, apelido no primeiro uso, sala com Grid dinâmico e Foco, modal de configuração de transmissão.
 - Administrador, aprovação de entrada, estado "reconectando", monitor de latência.
