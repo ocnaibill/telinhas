@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["app", "capture", "codec", "net", "protocol", "signaling", "spike", "ui-spike"]
+members = ["app", "capture", "codec", "media", "net", "protocol", "signaling", "spike", "ui-spike"]
 
 [workspace.package]
 version = "0.0.0"
@@ -22,4 +22,6 @@ opt-level = 3
 [profile.dev.package.telinhas-spike]
 opt-level = 3
 [profile.dev.package.telinhas-ui-spike]
+opt-level = 3
+[profile.dev.package.telinhas-media]
 opt-level = 3

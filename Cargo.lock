@@ -4583,6 +4583,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "telinhas-media"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "openh264",
+ "rand 0.10.4",
+ "rtc",
+ "rtc-signal",
+ "serde_json",
+ "telinhas-capture",
+ "telinhas-codec",
+ "telinhas-protocol",
+ "tokio",
+ "webrtc",
+]
+
+[[package]]
 name = "telinhas-net"
 version = "0.0.0"
 dependencies = [
