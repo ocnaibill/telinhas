@@ -86,6 +86,20 @@ Mudanças feitas depois dessas medições: o pool passou de 2 para 4 buffers e o
 
 A medição varia com o que está na tela, porque o Windows só entrega quadro quando a imagem muda. Para medir fps é preciso conteúdo em movimento constante.
 
+## 2.6 Bitrates medidos (M3e)
+
+Método: `spike measure`, captura real do monitor 0, NVENC (`h264_nvenc`, preset p1, ajuste de baixa latência, sem quadros B, quadro-chave a cada 2 s), qualidade constante `cq:23` (o quanto o conteúdo pede). Os números de CPU do `measure` não valem (o pipe e as cópias não existem no app final). Conteúdo **sintético**: TestUFO em tela cheia.
+
+| Conteúdo | Resolução e fps | Bitrate médio | p95 | Pico | Encoder (latência média) | GPU (geral) |
+|----------|-----------------|---------------|-----|------|--------------------------|-------------|
+| TestUFO "video game motion", stutter leve | 1080p60 | **18,9 Mbps** | 21,6 Mbps | 22,4 Mbps | **1,3 ms por quadro** | 49% |
+
+Leituras:
+- **RNF-03 atendido com folga:** 1,3 ms por quadro, contra a meta de 8 ms.
+- **Eu errei a previsão:** achei que o TestUFO daria um bitrate baixo, e deu 19 Mbps. Esse teste tem muito detalhe em movimento por toda a tela. Ele é um **limite superior** para conteúdo com movimento em tela cheia, não o caso típico de compartilhamento de tela (texto e janelas).
+- **O que isso diz sobre a suposição de ~8 Mbps:** para esse tipo de conteúdo em qualidade alta, ela é pouco menos da metade do que o conteúdo pede. Com 11 espectadores, 19 Mbps seriam cerca de 209 Mbps de upload no transmissor, mais do que qualquer conexão residencial.
+- **Consequência para o desenho (a decidir):** o app não deve deixar o bitrate seguir a qualidade do conteúdo. Deve ter um **bitrate alvo por predefinição** (resolução, fps e bitrate), com o encoder limitado a ele, e a estimativa de banda do RF-06 deve usar esse alvo, não o que o conteúdo pediria. Falta medir o conteúdo real (texto, rolagem, vídeo, jogo) e definir as predefinições.
+
 ## 3. Passos
 
 Cada passo termina com algo que você roda e me devolve.
