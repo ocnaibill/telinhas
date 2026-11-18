@@ -89,3 +89,8 @@ Dividido em etapas (DEC-61 escolheu o egui; o spike M4a passou):
 
 - **Design das telas** (itens que faltam no mockup) deve estar pronto antes do M4. Pode ser feito em paralelo ao M1 a M3.
 - **Hospedagem do servidor** (homelab, DEC-21): configuração do tunnel e do TURN entra junto do M2.
+
+## Beta para amigos (Windows)
+
+Instalador por usuário (Inno Setup, sem administrador), atualização automática ao abrir o app, servidor embutido no build dos amigos e microfone e webcam escondidos. Guia em `docs/DISTRIBUICAO.md`. Provado nos testes: o servidor serve a pasta `/dl` e o atualizador acha, baixa e confere a versão por ele. **Falta provar no Windows:** gerar o instalador com `scripts/build-release.ps1`, instalar, publicar uma versão maior e ver o app se atualizar.
+

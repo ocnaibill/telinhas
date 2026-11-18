@@ -20,5 +20,7 @@ tower-http = { version = "0.7.1", default-features = false, features = ["fs", "s
 uuid = { version = "1.29.2", features = ["v4", "serde"] }
 
 [dev-dependencies]
+sha2 = "0.10"
+telinhas-update = { path = "../update" }
 futures-util = "0.3.34"
 tokio-tungstenite = "0.30.0"

@@ -75,3 +75,42 @@ async fn without_a_folder_there_is_no_dl() {
     let (status, reply) = get(addr, "/healthz").await;
     assert!(status.contains("200") && reply.ends_with("ok"), "{reply}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_updater_finds_and_downloads_a_release_from_this_server() {
+    use sha2::{Digest, Sha256};
+    let dir = folder("release");
+    let release = dir.join("release");
+    std::fs::create_dir_all(&release).unwrap();
+    // Big enough to arrive in several pieces.
+    let installer: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+    let hash: String = Sha256::digest(&installer)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    std::fs::write(release.join("Telinhas-Setup-0.2.0.exe"), &installer).unwrap();
+    std::fs::write(
+        release.join("latest.json"),
+        format!(r#"{{"version":"0.2.0","installer":"Telinhas-Setup-0.2.0.exe","sha256":"{hash}","notes":"teste"}}"#),
+    )
+    .unwrap();
+    let addr = start(Some(release)).await;
+
+    let url = format!("http://{addr}/dl/latest.json");
+    let target = dir.join("downloaded");
+    let (found, saved) = tokio::task::spawn_blocking(move || {
+        let timeout = std::time::Duration::from_secs(10);
+        let update = telinhas_update::check(&url, "0.1.0", timeout)
+            .unwrap()
+            .unwrap();
+        let mut last = 0;
+        let path = telinhas_update::download(&update, &target, timeout, &mut |done, _| last = done)
+            .unwrap();
+        assert_eq!(last, 3_000_000);
+        (update.version.to_string(), std::fs::read(path).unwrap())
+    })
+    .await
+    .unwrap();
+    assert_eq!(found, "0.2.0");
+    assert_eq!(saved, installer);
+}
