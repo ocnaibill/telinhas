@@ -48,3 +48,13 @@ captura (WASAPI) ─► mistura ─► Opus ─► track de áudio ─► WebRTC
 - **DEC-63:** Opus pela libopus em C (crate `opus`), com `cmake` no build.
 - **DEC-64:** microfone misturado na faixa da transmissão.
 - **DEC-65:** áudio por aplicativo exige Windows 10 versão 2004 ou mais novo, com aviso na interface.
+
+## Resultado do spike de captura (Windows, 18/11/2026)
+
+Provado na máquina do mantenedor, que usa um mixer virtual (Fifine Genie) com várias saídas de áudio:
+
+- **Um programa** (`app:PID`) é capturado mesmo tocando numa saída virtual que não é a padrão: 501 quadros de 20 ms em 10 s, sem descartes. Serve para transmitir uma janela (DEC-16).
+- **O sistema sem o próprio app** (`system`) captura tudo, com um único `AudioClient` de exclusão.
+- **O sistema sem vários programas** funciona pela mistura de uma captura por programa não excluído. A exclusão de `Discord` fez o Discord sumir, e programas que começam a tocar no meio da captura entram sozinhos. A DEC-16 e a DEC-41 ficam **validadas no Windows**.
+- **Limite:** quando há um roteador de áudio no meio (aqui, `fifineAudioDriverControler.exe`), ele toca de novo o que recebe dos outros programas por outras saídas. Para o Windows isso é um programa a mais, então o som excluído volta por ele, e o som de quem passa pelo roteador pode soar duplicado. A saída é excluir também o roteador. A interface precisa listar todos os programas com sessão de áudio, inclusive os de saída virtual, e explicar isso.
+- **Custo de CPU:** com 11 a 12 capturas em paralelo, 7% de um núcleo (12,6% antes de descartar pacotes de silêncio e de ler a tabela de processos menos vezes). Sem lista de exclusão é uma captura só, bem mais barata. Reduzir mais exigiria capturar só as sessões ativas, ao custo de perder uns 250 ms do início de um som novo; fica como opção, não como padrão.
