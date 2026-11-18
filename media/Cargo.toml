@@ -23,8 +23,8 @@ rand = "0.10.4"
 rtc = "0.21.1"
 rtc-signal = "0.21.1"
 serde_json = "1.0.154"
-telinhas-capture = { version = "0.0.0", path = "../capture" }
-telinhas-codec = { version = "0.0.0", path = "../codec" }
-telinhas-protocol = { version = "0.0.0", path = "../protocol" }
+telinhas-capture = { path = "../capture" }
+telinhas-codec = { path = "../codec" }
+telinhas-protocol = { path = "../protocol" }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 webrtc = "0.21.1"

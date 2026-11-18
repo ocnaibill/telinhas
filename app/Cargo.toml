@@ -25,6 +25,7 @@ cpal = "0.18"
 telinhas-capture = { path = "../capture" }
 telinhas-media = { path = "../media" }
 telinhas-net = { path = "../net" }
+telinhas-update = { path = "../update" }
 telinhas-protocol = { path = "../protocol" }
 
 # The encoder is picked when a broadcast starts: hardware if it works, software

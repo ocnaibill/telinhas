@@ -139,8 +139,9 @@ pub fn check(
         .body_mut()
         .read_to_string()
         .map_err(|e| Error::Network(e.to_string()))?;
-    let manifest: Manifest =
-        serde_json::from_str(&text).map_err(|e| Error::Manifest(e.to_string()))?;
+    // Windows tools like to start a text file with a byte order mark.
+    let manifest: Manifest = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|e| Error::Manifest(e.to_string()))?;
     let latest = Version::parse(manifest.version.trim_start_matches('v'))
         .map_err(|e| Error::Manifest(format!("versão {:?}: {e}", manifest.version)))?;
     if latest <= current {

@@ -109,6 +109,8 @@ pub struct TelinhasApp {
     /// (DEC-62). A local choice of whoever watches.
     pub(crate) fill_video: bool,
     pub(crate) wake: Option<egui::Context>,
+    /// Looking for (and installing) a newer version, if this build does.
+    pub(crate) updater: Option<crate::updater::Updater>,
 }
 
 impl TelinhasApp {
@@ -135,6 +137,7 @@ impl TelinhasApp {
         let server = server_setting(cc.storage);
         let mut app = Self::build(nickname, Sources::load());
         app.wake = Some(cc.egui_ctx.clone());
+        app.updater = crate::updater::Updater::start();
         app.fill_video = cc
             .storage
             .and_then(|s| s.get_string(FILL_KEY))
@@ -234,6 +237,7 @@ impl TelinhasApp {
             requests: Vec::new(),
             reconnecting: false,
             fullscreen: false,
+            updater: None,
             diagnostics: false,
             fill_video: false,
             wake: None,
@@ -334,6 +338,7 @@ impl eframe::App for TelinhasApp {
         let ctx = ui.ctx().clone();
         self.poll_net();
         self.update_playback();
+        self.poll_update(&ctx);
         // The room has moving pictures and live numbers.
         if self.screen == Screen::Room {
             ctx.request_repaint();
@@ -347,6 +352,7 @@ impl eframe::App for TelinhasApp {
         }
         self.modals_ui(&ctx);
         self.toast_ui(&ctx);
+        self.update_overlay(&ctx);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
@@ -710,5 +716,41 @@ mod tests {
             .as_ref()
             .unwrap()
             .send(telinhas_media::Command::StopBroadcast);
+    }
+
+    #[test]
+    fn the_update_screen_draws_with_and_without_a_known_size() {
+        use crate::updater::{Status, Updater};
+        let mut app = app("Ana");
+        app.screen = Screen::Home;
+        for status in [
+            Status::Downloading {
+                version: "0.2.0".to_owned(),
+                fraction: None,
+            },
+            Status::Downloading {
+                version: "0.2.0".to_owned(),
+                fraction: Some(0.4),
+            },
+            Status::Installing("0.2.0".to_owned()),
+        ] {
+            app.updater = Some(Updater::showing(status));
+            let ctx = egui::Context::default();
+            theme::install(&ctx);
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1360.0, 820.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    app.home_ui(ui);
+                    app.update_overlay(&ui.ctx().clone());
+                },
+            );
+            output.textures_delta.clear();
+        }
     }
 }

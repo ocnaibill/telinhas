@@ -173,3 +173,12 @@ fn a_badly_formed_hash_is_refused_before_downloading() {
     let error = check(&format!("{}/dl/latest.json", server.base), "0.1.0", WAIT).unwrap_err();
     assert!(matches!(error, Error::Manifest(_)), "{error}");
 }
+
+#[test]
+fn a_manifest_written_by_windows_with_a_byte_order_mark_is_read() {
+    let mut body = "\u{feff}".as_bytes().to_vec();
+    body.extend(manifest("0.2.0", "x.exe", &sha256(b"x")));
+    let server = Server::start(vec![("/dl/latest.json", body)]);
+    let update = check(&format!("{}/dl/latest.json", server.base), "0.1.0", WAIT).unwrap();
+    assert!(update.is_some());
+}

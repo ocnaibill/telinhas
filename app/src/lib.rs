@@ -8,6 +8,7 @@ mod net_events;
 mod playback;
 mod screens;
 mod theme;
+mod updater;
 mod video;
 
 pub use app::TelinhasApp;
