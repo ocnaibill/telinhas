@@ -8,6 +8,15 @@
 use eframe::egui;
 
 fn main() -> eframe::Result {
+    // `telinhas --audio-test`: a tone through the app's own sound output, to
+    // tell a missing sound setup from a bug.
+    if std::env::args().any(|a| a == "--audio-test") {
+        match telinhas::audio_test() {
+            Ok(place) => println!("tocou um tom de 2 s em: {place}"),
+            Err(reason) => println!("sem som: {reason}"),
+        }
+        return Ok(());
+    }
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Telinhas")
         // Wayland and the desktop match the window to its launcher and icon by this.

@@ -133,16 +133,50 @@ impl Mixer {
 pub struct Playback {
     mixer: Arc<Mutex<Mixer>>,
     _stream: cpal::Stream,
+    /// Which sound system and device it plays on, for the self-test.
+    pub description: String,
+}
+
+/// The sound systems to try, in order, each with its name and the host or why
+/// it could not even be opened. The system default comes first: on most
+/// desktops ALSA is wired to PipeWire or PulseAudio already. On Linux the
+/// PulseAudio protocol is the second try, for setups where it is not.
+fn hosts() -> Vec<(String, Result<cpal::Host, String>)> {
+    let default = cpal::default_host();
+    let mut hosts = vec![(default.id().to_string(), Ok(default))];
+    #[cfg(target_os = "linux")]
+    hosts.push((
+        "PulseAudio".to_owned(),
+        cpal::host_from_id(cpal::HostId::PulseAudio).map_err(|e| e.to_string()),
+    ));
+    hosts
 }
 
 impl Playback {
-    /// Opens the default output device.
+    /// Opens the default output device, on the first sound system that works.
     pub fn start() -> Result<Self, String> {
-        let host = cpal::default_host();
+        let mut problems = Vec::new();
+        for (name, host) in hosts() {
+            match host.and_then(|host| Self::start_on(&host)) {
+                Ok(playback) => return Ok(playback),
+                Err(problem) => problems.push(format!("{name}: {problem}")),
+            }
+        }
+        Err(problems.join("; "))
+    }
+
+    fn start_on(host: &cpal::Host) -> Result<Self, String> {
         let device = host
             .default_output_device()
             .ok_or_else(|| "nenhuma saída de áudio encontrada".to_owned())?;
         let supported = device.default_output_config().map_err(|e| e.to_string())?;
+        let description = format!(
+            "{} / {}",
+            host.id(),
+            device
+                .description()
+                .map_or_else(|_| "saída padrão".to_owned(), |d| d.name().to_owned())
+        );
         let format = supported.sample_format();
         let config = supported.config();
         let mixer = Arc::new(Mutex::new(Mixer::default()));
@@ -157,7 +191,30 @@ impl Playback {
         Ok(Self {
             mixer,
             _stream: stream,
+            description,
         })
+    }
+
+    /// Plays a short tone through the same path the room's sound takes, so a
+    /// person can tell whether sound comes out. Returns where it played.
+    pub fn self_test() -> Result<String, String> {
+        let playback = Self::start()?;
+        let buffer = Arc::new(AudioBuffer::default());
+        let tone: Vec<f32> = (0..48_000 * 2)
+            .flat_map(|i| {
+                let value = 0.2 * (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin();
+                [value, value]
+            })
+            .collect();
+        buffer.push_for_test(&tone[..48_000 * 2 / 5 * 2 / 2]);
+        playback.set_sources(vec![(PeerId::from_u128(1), Arc::clone(&buffer), 1.0)]);
+        // Feed it in 20 ms pieces, as the network would, for two seconds.
+        for piece in 0..100usize {
+            let from = (piece * 960 * 2) % (tone.len() - 960 * 2);
+            buffer.push_for_test(&tone[from..from + 960 * 2]);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        Ok(playback.description.clone())
     }
 
     pub fn set_sources(&self, wanted: Vec<(PeerId, Arc<AudioBuffer>, f32)>) {
