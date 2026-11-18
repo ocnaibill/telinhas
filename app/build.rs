@@ -29,10 +29,14 @@ fn copy_ffmpeg_dlls() {
     println!("cargo:rerun-if-env-changed=FFMPEG_DIR");
     println!("cargo:rerun-if-env-changed=PATH");
     // OUT_DIR is target/<profile>/build/<package>/out: the executable sits
-    // three levels up.
+    // next to the `build` folder, so find that and go one up.
     let Some(target) = std::env::var_os("OUT_DIR")
         .map(PathBuf::from)
-        .and_then(|out| out.ancestors().nth(3).map(PathBuf::from))
+        .and_then(|out| {
+            out.ancestors()
+                .find(|dir| dir.file_name().is_some_and(|name| name == "build"))
+                .and_then(|build| build.parent().map(PathBuf::from))
+        })
     else {
         return;
     };
