@@ -23,6 +23,9 @@ pub(crate) const FILL_KEY: &str = "fill_video";
 /// for when they are.
 pub(crate) const MIC_AND_CAMERA: bool = false;
 
+/// Said where broadcasting is not offered because the system cannot capture yet.
+pub(crate) const BROADCAST_UNAVAILABLE: &str = "A transmissão ainda não está disponível neste sistema. Dá para entrar em salas, assistir e ouvir.";
+
 /// A server built into this binary, set when it is compiled with
 /// `TELINHAS_DEFAULT_SERVER`. The versions for friends have it, so nobody
 /// types an address; it is not even shown.
@@ -136,6 +139,10 @@ impl TelinhasApp {
         };
         let server = server_setting(cc.storage);
         let mut app = Self::build(nickname, Sources::load());
+        if app.sources.capture_unavailable {
+            // Entering as a broadcaster would open a setup that cannot work.
+            app.home.mode = EntryMode::Watching;
+        }
         app.wake = Some(cc.egui_ctx.clone());
         app.updater = crate::updater::Updater::start();
         app.fill_video = cc
@@ -294,6 +301,10 @@ impl TelinhasApp {
 
     /// Opens the broadcast setup with fresh choices.
     pub(crate) fn open_broadcast_modal(&mut self) {
+        if self.sources.capture_unavailable {
+            self.show_toast(BROADCAST_UNAVAILABLE);
+            return;
+        }
         self.sources.refresh_audio_apps();
         let mut draft = BroadcastDraft::new();
         draft.clamp(&self.sources);
@@ -752,5 +763,25 @@ mod tests {
             );
             output.textures_delta.clear();
         }
+    }
+
+    #[test]
+    fn where_capture_does_not_exist_yet_broadcasting_is_not_offered() {
+        let sources = Sources {
+            capture_unavailable: true,
+            ..Sources::demo()
+        };
+        let mut app = TelinhasApp::build("Ana".to_owned(), sources);
+        app.enter_room("ABCD-2345", false);
+        app.open_broadcast_modal();
+        assert!(matches!(app.modal, Modal::None), "the setup must not open");
+        assert!(app.toast.is_some(), "and the person is told why");
+        // The room, with its disabled buttons, still draws.
+        frames(&mut app, 3);
+        // Entering as a broadcaster does not open the setup either.
+        app.leave_room();
+        app.home.mode = EntryMode::Broadcasting;
+        app.enter_room("ABCD-2345", false);
+        assert!(matches!(app.modal, Modal::None));
     }
 }

@@ -10,6 +10,8 @@ use eframe::egui;
 fn main() -> eframe::Result {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Telinhas")
+        // Wayland and the desktop match the window to its launcher and icon by this.
+        .with_app_id("telinhas")
         .with_inner_size([1360.0, 820.0])
         .with_min_inner_size([980.0, 640.0]);
     if let Some(icon) = telinhas::window_icon() {

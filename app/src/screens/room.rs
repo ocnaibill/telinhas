@@ -553,11 +553,17 @@ impl TelinhasApp {
                     .color(theme::TEXT_DIM),
                 );
                 ui.add_space(8.0);
-                if theme::primary_button(
-                    ui,
-                    format!("{}  Transmitir minha tela", theme::icons::MONITOR_PLAY),
-                )
-                .clicked()
+                let can = !self.sources.capture_unavailable;
+                if ui
+                    .add_enabled_ui(can, |ui| {
+                        theme::primary_button(
+                            ui,
+                            format!("{}  Transmitir minha tela", theme::icons::MONITOR_PLAY),
+                        )
+                    })
+                    .inner
+                    .on_disabled_hover_text(crate::app::BROADCAST_UNAVAILABLE)
+                    .clicked()
                 {
                     actions.open_broadcast = true;
                 }
@@ -745,11 +751,16 @@ impl TelinhasApp {
                                 {
                                     actions.stop_broadcast = true;
                                 }
-                            } else if theme::primary_button(
-                                ui,
-                                format!("{}  Transmitir", theme::icons::MONITOR_PLAY),
-                            )
-                            .clicked()
+                            } else if ui
+                                .add_enabled_ui(!self.sources.capture_unavailable, |ui| {
+                                    theme::primary_button(
+                                        ui,
+                                        format!("{}  Transmitir", theme::icons::MONITOR_PLAY),
+                                    )
+                                })
+                                .inner
+                                .on_disabled_hover_text(crate::app::BROADCAST_UNAVAILABLE)
+                                .clicked()
                             {
                                 actions.open_broadcast = true;
                             }
@@ -773,13 +784,17 @@ impl TelinhasApp {
                                     room.mic_on = !room.mic_on;
                                 }
                             }
-                            if theme::icon_button(
-                                ui,
-                                theme::icons::GEAR,
-                                "Configurar transmissão",
-                                false,
-                            )
-                            .clicked()
+                            if ui
+                                .add_enabled_ui(!self.sources.capture_unavailable, |ui| {
+                                    theme::icon_button(
+                                        ui,
+                                        theme::icons::GEAR,
+                                        "Configurar transmissão",
+                                        false,
+                                    )
+                                })
+                                .inner
+                                .clicked()
                             {
                                 actions.open_broadcast = true;
                             }

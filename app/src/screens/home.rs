@@ -228,7 +228,11 @@ impl TelinhasApp {
                 (
                     EntryMode::Broadcasting,
                     "Transmitindo",
-                    "Abre a configuração de transmissão ao entrar",
+                    if self.sources.capture_unavailable {
+                        "Ainda não disponível neste sistema"
+                    } else {
+                        "Abre a configuração de transmissão ao entrar"
+                    },
                 ),
             ] {
                 let selected = self.home.mode == mode;
@@ -250,7 +254,8 @@ impl TelinhasApp {
                 if selected {
                     theme::outline(ui, rect, theme::INDIGO);
                 }
-                if click.clicked() {
+                let blocked = mode == EntryMode::Broadcasting && self.sources.capture_unavailable;
+                if click.clicked() && !blocked {
                     self.home.mode = mode;
                 }
             }

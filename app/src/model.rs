@@ -341,6 +341,10 @@ pub struct Sources {
     pub audio_apps: Vec<String>,
     /// Set when the lists are test data because the system could not be asked.
     pub is_demo: bool,
+    /// The system has no way to capture yet (the Linux and macOS backends are
+    /// not done), so the app must not offer to broadcast: the test data would
+    /// send a test picture and a tone to a real room.
+    pub capture_unavailable: bool,
 }
 
 impl Sources {
@@ -356,9 +360,13 @@ impl Sources {
                     windows,
                     audio_apps,
                     is_demo: false,
+                    capture_unavailable: false,
                 }
             }
-            _ => Self::demo(),
+            _ => Self {
+                capture_unavailable: true,
+                ..Self::demo()
+            },
         }
     }
 
@@ -407,6 +415,7 @@ impl Sources {
                 "firefox.exe".into(),
             ],
             is_demo: true,
+            capture_unavailable: false,
         }
     }
 }
