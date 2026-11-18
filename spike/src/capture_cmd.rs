@@ -37,11 +37,15 @@ fn mean(values: &[f64]) -> f64 {
 }
 
 /// `monitor:N`, `window:HANDLE` or `window:TEXT` (matches the title or the
-/// program name, ignoring case).
+/// program name, ignoring case), or `portal` on Linux: the desktop asks which
+/// screen or window.
 pub fn parse_source(text: &str) -> Result<Source> {
+    if text == "portal" {
+        return Ok(Source::Portal);
+    }
     let (kind, value) = text
         .split_once(':')
-        .ok_or_else(|| anyhow!("use monitor:N or window:HANDLE-OR-TEXT"))?;
+        .ok_or_else(|| anyhow!("use monitor:N, window:HANDLE-OR-TEXT or portal"))?;
     match kind {
         "monitor" => Ok(Source::Monitor(value.parse()?)),
         "window" => {
