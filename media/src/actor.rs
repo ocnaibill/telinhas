@@ -119,8 +119,10 @@ fn start_broadcast(
         Arc::clone(&need_key),
         Arc::clone(&targets),
         Arc::clone(&shared.stats),
-        shared.events.clone(),
-        Arc::clone(&shared.wake),
+        {
+            let shared = Arc::clone(shared);
+            Arc::new(move |event| shared.tell(event))
+        },
     );
     state.broadcast = Some(Broadcast {
         stop,

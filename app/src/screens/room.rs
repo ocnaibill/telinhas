@@ -47,6 +47,9 @@ impl TelinhasApp {
         let ctx = ui.ctx().clone();
         let toggle = ctx.input(|i| i.key_pressed(egui::Key::F11))
             || (self.fullscreen && ctx.input(|i| i.key_pressed(egui::Key::Escape)));
+        if ctx.input(|i| i.key_pressed(egui::Key::F3)) {
+            self.diagnostics = !self.diagnostics;
+        }
         if toggle {
             self.fullscreen = !self.fullscreen;
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
@@ -58,6 +61,9 @@ impl TelinhasApp {
         }
         self.stage(ui, &mut room, &mut actions);
         self.floating_bar(&ui.ctx().clone(), &mut room, &mut actions);
+        if self.diagnostics {
+            self.diagnostics_ui(&ui.ctx().clone(), &room);
+        }
         self.join_request_popup(&ui.ctx().clone(), &mut room);
 
         if actions.fullscreen {
@@ -134,22 +140,18 @@ impl TelinhasApp {
                             ui.label(RichText::new("Aprovar entradas").small().color(theme::TEXT_DIM));
                         }
                     }
-                    // Real participants have no latency measure yet (it comes
-                    // with the monitor); showing a made-up number would lie.
-                    let measured = self.is_demo() || room.participants.iter().any(|p| !p.is_me && p.latency_ms > 0);
-                    let latency = room.average_latency() as f32 + (time * 1.7).sin() * 2.0;
-                    let text = if measured {
-                        format!("{}  {:.0} ms", theme::icons::LIGHTNING, latency.max(0.0))
+                    // Demonstration data, or the delay measured on the video path.
+                    let delay = if self.is_demo() {
+                        Some(room.average_latency() as f32 + (time * 1.7).sin() * 2.0)
                     } else {
-                        format!("{}  — ms", theme::icons::LIGHTNING)
+                        self.video_delay()
                     };
-                    theme::pill(
-                        ui,
-                        text,
-                        theme::GREEN,
-                        theme::GREEN_DIM,
-                    )
-                    .on_hover_text("Latência média até os outros participantes");
+                    let text = match delay {
+                        Some(ms) => format!("{}  {:.0} ms", theme::icons::LIGHTNING, ms.max(0.0)),
+                        None => format!("{}  — ms", theme::icons::LIGHTNING),
+                    };
+                    theme::pill(ui, text, theme::GREEN, theme::GREEN_DIM)
+                    .on_hover_text("Atraso do vídeo, da captura até aparecer na tela do outro (F3 mostra os detalhes)");
                     theme::pill(
                         ui,
                         format!(
@@ -241,6 +243,94 @@ impl TelinhasApp {
                 }
             }
         }
+    }
+
+    /// The average delay of the video on the paths this app takes part in.
+    fn video_delay(&self) -> Option<f32> {
+        let stats = self.media.as_ref()?.stats();
+        let values: Vec<f32> = stats
+            .viewers
+            .values()
+            .map(|p| p.total_ms)
+            .chain(stats.receiving.values().map(|r| r.path.total_ms))
+            .filter(|ms| *ms > 0.0)
+            .collect();
+        (!values.is_empty()).then(|| values.iter().sum::<f32>() / values.len() as f32)
+    }
+
+    /// Numbers over the stage: where the time goes, and how the video flows.
+    fn diagnostics_ui(&self, ctx: &egui::Context, room: &Room) {
+        let Some(media) = &self.media else {
+            return;
+        };
+        let stats = media.stats();
+        let name = |peer| room.name_of(peer).unwrap_or("?").to_owned();
+        let path_line = |p: &telinhas_media::Path| {
+            format!(
+                "atraso {:.0} ms = codificação {:.0} + rede {:.0} + decodificação do espectador {:.0}   (banda estimada {:.1} Mbps)",
+                p.total_ms,
+                p.encode_ms,
+                p.network_ms,
+                p.viewer_ms,
+                p.estimate_kbps / 1000.0
+            )
+        };
+        let mut lines: Vec<String> = Vec::new();
+        if let Some(s) = &stats.sending {
+            lines.push(format!(
+                "ENVIANDO  {} ({})  {}x{}  {:.0} fps  {:.1} Mbps  codifica em {:.1} ms",
+                s.encoder,
+                if s.hardware { "hardware" } else { "software" },
+                s.width,
+                s.height,
+                s.fps,
+                s.kbps / 1000.0,
+                s.encode_ms
+            ));
+            for (peer, path) in &stats.viewers {
+                lines.push(format!("  para {}: {}", name(*peer), path_line(path)));
+            }
+        }
+        for (peer, r) in &stats.receiving {
+            lines.push(format!(
+                "RECEBENDO de {}  {}x{}  {:.0} fps  {:.1} Mbps  decodifica em {:.1} ms  fila {}",
+                name(*peer),
+                r.width,
+                r.height,
+                r.fps,
+                r.kbps / 1000.0,
+                r.decode_ms,
+                r.backlog
+            ));
+            if r.path.total_ms > 0.0 {
+                lines.push(format!("  {}", path_line(&r.path)));
+            }
+        }
+        if lines.is_empty() {
+            lines.push("Sem vídeo ainda.".to_owned());
+        }
+        egui::Area::new(theme::id("diagnostics"))
+            .anchor(
+                Align2::LEFT_TOP,
+                [20.0, if self.fullscreen { 20.0 } else { 70.0 }],
+            )
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_black_alpha(200))
+                    .corner_radius(CornerRadius::same(10))
+                    .inner_margin(10.0)
+                    .show(ui, |ui| {
+                        for line in lines {
+                            ui.label(
+                                RichText::new(line)
+                                    .monospace()
+                                    .small()
+                                    .color(Color32::WHITE),
+                            );
+                        }
+                    });
+            });
     }
 
     fn banners(&mut self, ui: &mut egui::Ui, room: &Room) {

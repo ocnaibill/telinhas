@@ -302,7 +302,7 @@ pub fn valid_nickname(text: &str) -> bool {
 pub fn target_kbps(width: u32, height: u32, fps: u32) -> u32 {
     let pixels = f64::from(width) * f64::from(height) / (1920.0 * 1080.0);
     let rate = f64::from(fps) / 60.0;
-    (8000.0 * pixels.powf(0.75) * rate.powf(0.6)).round() as u32
+    (20_000.0 * pixels.powf(0.75) * rate.powf(0.6)).round() as u32
 }
 
 /// What the sender's uplink needs: the ceiling plus 25% for bursts (the
@@ -569,9 +569,9 @@ mod tests {
 
     #[test]
     fn bitrate_ceiling_follows_the_measurements() {
-        assert_eq!(target_kbps(1920, 1080, 60), 8000);
+        assert_eq!(target_kbps(1920, 1080, 60), 20_000);
         let eco = target_kbps(1280, 720, 30);
-        assert!((2500..3500).contains(&eco), "{eco}");
+        assert!((6000..9000).contains(&eco), "{eco}");
         assert!(target_kbps(1920, 1080, 30) < target_kbps(1920, 1080, 60));
         assert_eq!(upload_kbps(8000, 11), 110_000);
     }

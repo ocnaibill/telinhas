@@ -89,6 +89,8 @@ pub struct TelinhasApp {
     pub(crate) reconnecting: bool,
     /// Only the video and the control bar, in a full-screen window.
     pub(crate) fullscreen: bool,
+    /// The numbers panel over the video (F3).
+    pub(crate) diagnostics: bool,
     pub(crate) wake: Option<egui::Context>,
 }
 
@@ -209,6 +211,7 @@ impl TelinhasApp {
             requests: Vec::new(),
             reconnecting: false,
             fullscreen: false,
+            diagnostics: false,
             wake: None,
         }
     }
@@ -640,6 +643,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         assert_eq!(beto.room.as_ref().unwrap().streams.len(), 1);
+        beto.diagnostics = true;
         frames(&mut beto, 3);
 
         ana.room.as_mut().unwrap().broadcasting = false;

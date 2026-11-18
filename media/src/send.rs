@@ -15,10 +15,10 @@ use telinhas_codec::{Format, Frame, Options, Rate};
 use telinhas_protocol::PeerId;
 use tokio::sync::broadcast;
 
+use crate::Event;
 use crate::link::BWE_INITIAL;
 use crate::stamp;
 use crate::stats::{Sending, Stats, smooth};
-use crate::{Event, EventSender};
 
 /// What to broadcast.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -213,15 +213,10 @@ pub(crate) fn spawn_broadcast(
     need_key: Arc<AtomicBool>,
     targets: Targets,
     stats: Arc<Mutex<Stats>>,
-    events: EventSender,
-    wake: Arc<dyn Fn() + Send + Sync>,
+    tell: Arc<dyn Fn(Event) + Send + Sync>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        let tell = |event: Event| {
-            let _ = events.send(event);
-            wake();
-        };
-        if let Err(error) = run(spec, &out, &stop, &need_key, &targets, &stats, &tell) {
+        if let Err(error) = run(spec, &out, &stop, &need_key, &targets, &stats, &*tell) {
             tell(Event::BroadcastFailed(error.to_string()));
         }
         stats.lock().unwrap().sending = None;

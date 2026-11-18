@@ -55,7 +55,7 @@ const H264_PAYLOAD_TYPE: PayloadType = 102;
 // let the estimator pull down if the path cannot take it.
 pub(crate) const BWE_INITIAL: f64 = 6_000_000.0;
 const BWE_MIN: f64 = 150_000.0;
-const BWE_MAX: f64 = 20_000_000.0;
+const BWE_MAX: f64 = 50_000_000.0;
 
 #[derive(Debug, Clone)]
 pub struct LinkConfig {
