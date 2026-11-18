@@ -82,6 +82,9 @@ pub struct TelinhasApp {
     pub(crate) server_draft: String,
     pub(crate) net: Option<Handle>,
     pub(crate) media: Option<telinhas_media::Media>,
+    /// The sound output, opened when the first sound arrives.
+    pub(crate) playback: Option<crate::playback::Playback>,
+    pub(crate) playback_failed: bool,
     pub(crate) link: Link,
     /// A problem to show on the home screen (a wrong code, no server...).
     pub(crate) notice: Option<String>,
@@ -214,6 +217,8 @@ impl TelinhasApp {
             server_draft: String::new(),
             net: None,
             media: None,
+            playback: None,
+            playback_failed: false,
             link: Link::Idle,
             notice: None,
             requests: Vec::new(),
@@ -312,6 +317,7 @@ impl eframe::App for TelinhasApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll_net();
+        self.update_playback();
         // The room has moving pictures and live numbers.
         if self.screen == Screen::Room {
             ctx.request_repaint();

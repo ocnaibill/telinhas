@@ -73,6 +73,12 @@ impl AudioBuffer {
         }
     }
 
+    /// Puts samples in directly, as a decoder would. For tests.
+    #[doc(hidden)]
+    pub fn push_for_test(&self, frame: &[f32]) {
+        self.push(frame);
+    }
+
     /// Fills `out` (interleaved stereo) with what is waiting and returns how
     /// many samples were real; the rest of `out` is silence.
     pub fn pull(&self, out: &mut [f32]) -> usize {

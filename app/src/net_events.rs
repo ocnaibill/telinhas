@@ -18,6 +18,47 @@ impl TelinhasApp {
         }
     }
 
+    /// Gives the sound output the broadcasters' sound, with each one's volume.
+    /// The output opens when the first sound arrives, not before.
+    pub(crate) fn update_playback(&mut self) {
+        let Some(media) = &self.media else {
+            return;
+        };
+        let wanted: Vec<_> = self
+            .room
+            .iter()
+            .flat_map(|room| {
+                let me = room.me_id();
+                room.streams
+                    .iter()
+                    .filter(move |s| s.owner_id.is_some() && s.owner_id != me)
+            })
+            .filter_map(|s| {
+                let id = s.owner_id?;
+                Some((id, media.audio(id)?, s.volume))
+            })
+            .collect();
+        if self.playback.is_none() {
+            let sound_arrived = wanted
+                .iter()
+                .any(|(_, buffer, _)| buffer.buffered_ms() > 0.0);
+            if !sound_arrived || self.playback_failed {
+                return;
+            }
+            match crate::playback::Playback::start() {
+                Ok(playback) => self.playback = Some(playback),
+                Err(reason) => {
+                    self.playback_failed = true;
+                    self.show_toast(format!("Sem saída de áudio: {reason}"));
+                    return;
+                }
+            }
+        }
+        if let Some(playback) = &self.playback {
+            playback.set_sources(wanted);
+        }
+    }
+
     fn on_media_event(&mut self, event: telinhas_media::Event) {
         use telinhas_media::Event as Media;
         match event {

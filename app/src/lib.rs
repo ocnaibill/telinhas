@@ -5,6 +5,7 @@ mod logo;
 mod mockvideo;
 mod model;
 mod net_events;
+mod playback;
 mod screens;
 mod theme;
 mod video;

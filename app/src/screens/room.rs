@@ -314,6 +314,12 @@ impl TelinhasApp {
                 r.decode_ms,
                 r.backlog
             ));
+            if r.audio.packets > 0 {
+                lines.push(format!(
+                    "  som: {} pacotes, {} perdidos, {:.0} ms no buffer",
+                    r.audio.packets, r.audio.lost, r.audio.buffered_ms
+                ));
+            }
             if r.path.total_ms > 0.0 {
                 lines.push(format!("  {}", path_line(&r.path)));
             }
