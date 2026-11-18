@@ -62,6 +62,8 @@ Dividido em etapas (DEC-61 escolheu o egui; o spike M4a passou):
 - Áudio de janela específica, do sistema e do microfone (DEC-16).
 - Exclusão de aplicativos do áudio ao transmitir tela inteira, validada em protótipo (DEC-41).
 
+**Estado:** captura validada no Windows (`docs/PLANO-M5.md`); Opus, transporte, reprodução com volume por transmissão, captura a partir do modal e microfone misturado implementados e cobertos por testes em loopback. Falta a prova entre duas máquinas e afinar a sincronia com o vídeo.
+
 **Saída:** transmitir tela inteira sem que a voz do Discord volte a quem fala. Cobre RF-08.
 
 ## M6 — Camadas e multi-transmissão
