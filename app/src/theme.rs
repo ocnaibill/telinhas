@@ -74,7 +74,9 @@ pub fn install(ctx: &egui::Context) {
     visuals.widgets.hovered.weak_bg_fill = CARD_HI;
     visuals.widgets.active.bg_fill = INDIGO_DIM;
     visuals.widgets.active.weak_bg_fill = INDIGO_DIM;
-    ctx.set_visuals(visuals);
+    // Always dark, whatever the system's app mode is: the palette is ours.
+    ctx.set_theme(egui::ThemePreference::Dark);
+    ctx.set_visuals_of(egui::Theme::Dark, visuals);
 
     ctx.global_style_mut(|style| {
         style.spacing.item_spacing = Vec2::new(10.0, 10.0);

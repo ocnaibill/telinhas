@@ -295,6 +295,7 @@ fn run(
     // NVENC was measured to overshoot its ceiling by up to about 50%, and what
     // it sends beyond the estimate waits in the pacer's queue as latency
     // (0.8 gave about 380 ms in loopback, 0.5 gave 107 ms).
+    let mut on_hardware = info.hardware;
     let headroom = if info.hardware { 0.5 } else { 0.8 };
     if pick(headroom) != kbps {
         kbps = pick(headroom);
@@ -362,12 +363,34 @@ fn run(
             encoder = telinhas_codec::create(spec.backend, options(width, height, kbps))?.encoder;
         }
         let encode_started = Instant::now();
-        let packets = encoder.encode(&Frame {
+        let frame = Frame {
             width: w,
             height: h,
             stride: w as usize * 4,
             bgra: pixels,
-        })?;
+        };
+        let packets = match encoder.encode(&frame) {
+            Ok(packets) => packets,
+            Err(error) if on_hardware => {
+                // The hardware encoder opened but cannot encode (a driver
+                // that lies about what it supports): carry on in software
+                // instead of ending the broadcast.
+                on_hardware = false;
+                kbps = pick(0.8);
+                let options = options(width, height, kbps);
+                encoder = telinhas_codec::create(Backend::Software, options)?.encoder;
+                let info = encoder.info();
+                tell(Event::Encoder {
+                    name: info.name,
+                    hardware: false,
+                    fallback_reason: Some(error.to_string()),
+                    width,
+                    height,
+                });
+                encoder.encode(&frame)?
+            }
+            Err(error) => return Err(error.into()),
+        };
         let encode_ms = encode_started.elapsed().as_secs_f32() * 1000.0;
         let counter = tick as u32;
         for packet in packets {

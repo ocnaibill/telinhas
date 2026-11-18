@@ -20,6 +20,11 @@ pub struct Software {
     force_key: bool,
 }
 
+/// Slices spread over a few cores: one core cannot keep up with 1080p60.
+fn threads() -> u16 {
+    std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as u16
+}
+
 fn open(options: &Options) -> Result<OpenH264Encoder> {
     let format = options.format;
     if !format.width.is_multiple_of(2) || !format.height.is_multiple_of(2) {
@@ -35,6 +40,7 @@ fn open(options: &Options) -> Result<OpenH264Encoder> {
         .usage_type(UsageType::ScreenContentRealTime)
         .rate_control_mode(RateControlMode::Bitrate)
         .skip_frames(true)
+        .num_threads(threads())
         .intra_frame_period(IntraFramePeriod::from_num_frames(options.keyframe_every));
     OpenH264Encoder::with_api_config(OpenH264API::from_source(), config)
         .map_err(|error| Error::Backend(error.to_string()))

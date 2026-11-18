@@ -1,6 +1,6 @@
 //! Video encoders behind one trait (DEC-39).
 //!
-//! Two backends: hardware H.264 through the FFmpeg libraries (NVENC, behind
+//! Two backends: hardware H.264 through the FFmpeg libraries (NVENC, AMF and Quick Sync, behind
 //! the `ffmpeg` feature) and software H.264 through `openh264`. The app asks
 //! for [`Backend::Auto`], and when hardware is not available it gets the
 //! software encoder together with the reason, so the interface can warn that
@@ -15,7 +15,7 @@ use std::fmt;
 mod software;
 
 #[cfg(feature = "ffmpeg")]
-mod nvenc;
+mod hardware;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -144,7 +144,7 @@ pub fn create(backend: Backend, options: Options) -> Result<Created> {
 
 #[cfg(feature = "ffmpeg")]
 fn open_hardware(options: Options) -> Result<Box<dyn Encoder>> {
-    Ok(Box::new(nvenc::Nvenc::open(options)?))
+    Ok(Box::new(hardware::Hardware::open(options)?))
 }
 
 #[cfg(not(feature = "ffmpeg"))]
