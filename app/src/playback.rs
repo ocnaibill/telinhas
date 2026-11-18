@@ -175,25 +175,34 @@ impl Playback {
         })
     }
 
-    /// Plays a short tone through the same path the room's sound takes, so a
-    /// person can tell whether sound comes out. Returns where it played.
+    /// Plays a tone through the same path the room's sound takes, so a person
+    /// can tell whether sound comes out. It starts with a second of silence, so
+    /// an output that sleeps while idle (the WSL sound goes over a remote
+    /// channel) has time to wake, then three seconds of tone. Returns where it
+    /// played.
     pub fn self_test() -> Result<String, String> {
         let playback = Self::start()?;
         let buffer = Arc::new(AudioBuffer::default());
-        let tone: Vec<f32> = (0..48_000 * 2)
-            .flat_map(|i| {
-                let value = 0.2 * (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin();
-                [value, value]
-            })
-            .collect();
-        buffer.push_for_test(&tone[..48_000 * 2 / 5 * 2 / 2]);
         playback.set_sources(vec![(PeerId::from_u128(1), Arc::clone(&buffer), 1.0)]);
-        // Feed it in 20 ms pieces, as the network would, for two seconds.
-        for piece in 0..100usize {
-            let from = (piece * 960 * 2) % (tone.len() - 960 * 2);
-            buffer.push_for_test(&tone[from..from + 960 * 2]);
+        // A second of silence, then three of tone, then a short tail of silence,
+        // fed in 20 ms pieces as the network would.
+        let silence = vec![0f32; 960 * 2];
+        let mut phase = 0f32;
+        for piece in 0..(50 + 150 + 15) {
+            let mut frame = silence.clone();
+            if (50..200).contains(&piece) {
+                for sample in frame.chunks_mut(2) {
+                    let value = 0.3 * phase.sin();
+                    sample[0] = value;
+                    sample[1] = value;
+                    phase += 2.0 * std::f32::consts::PI * 440.0 / 48_000.0;
+                }
+            }
+            buffer.push_for_test(&frame);
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
+        // Let what is still buffered play out before the output closes.
+        std::thread::sleep(std::time::Duration::from_millis(300));
         Ok(playback.description.clone())
     }
 

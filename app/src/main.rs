@@ -11,8 +11,9 @@ fn main() -> eframe::Result {
     // `telinhas --audio-test`: a tone through the app's own sound output, to
     // tell a missing sound setup from a bug.
     if std::env::args().any(|a| a == "--audio-test") {
+        println!("vai tocar: 1 s de silêncio, depois 3 s de tom (440 Hz)...");
         match telinhas::audio_test() {
-            Ok(place) => println!("tocou um tom de 2 s em: {place}"),
+            Ok(place) => println!("tocou 1 s de silêncio e 3 s de tom em: {place}"),
             Err(reason) => println!("sem som: {reason}"),
         }
         return Ok(());

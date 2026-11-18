@@ -7,7 +7,7 @@ mod model;
 mod net_events;
 mod playback;
 
-/// Plays a two-second tone through the app's sound output and says where it
+/// Plays a three-second tone through the app's sound output and says where it
 /// played, or why it could not. For `telinhas --audio-test`.
 pub fn audio_test() -> Result<String, String> {
     playback::Playback::self_test()
