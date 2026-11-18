@@ -43,11 +43,8 @@ captura (WASAPI) ─► mistura ─► Opus ─► track de áudio ─► WebRTC
 4. **Captura no app**: fonte de áudio no modal (já desenhado), exclusão de aplicativos, microfone.
 5. **Fechamento:** medições, o RNF novo de atraso de áudio, e a prova de ponta a ponta.
 
-## Decisões que preciso de você
+## Decisões (confirmadas pelo mantenedor)
 
-1. **Biblioteca do Opus.**
-   - **A. `opus` (libopus em C).** Qualidade e maturidade de referência. Exige compilar C com `cmake` em cada sistema (já temos o FFmpeg e o libclang no ambiente de build do Windows, então é mais uma dependência da mesma família).
-   - **B. `opus-rs` (Rust puro).** Sem dependência de C, mas é recente e eu não o conheço em produção. O risco é qualidade ou bugs de borda.
-   - Recomendo **A**. Se a instalação do `cmake` for um problema, trocamos por **B** e comparamos.
-2. **Microfone misturado na faixa da transmissão (proposta) ou em uma faixa separada.** Misturar é mais simples e cabe na DEC-16. Uma faixa separada deixaria o espectador silenciar só a voz, mas é mais trabalho e muda a interface. Recomendo **misturar** por enquanto.
-3. **Windows 10 anterior à 2004:** o áudio por aplicativo não existe lá. Recomendo exigir o Windows 10 2004 ou mais novo para o áudio, e dizer isso na interface (RNF-25, permissões e requisitos pedidos só quando o recurso é usado).
+- **DEC-63:** Opus pela libopus em C (crate `opus`), com `cmake` no build.
+- **DEC-64:** microfone misturado na faixa da transmissão.
+- **DEC-65:** áudio por aplicativo exige Windows 10 versão 2004 ou mais novo, com aviso na interface.

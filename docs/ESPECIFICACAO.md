@@ -76,6 +76,9 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-60 | Encerra o M3 com base em `docs/PLANO-M3.md`: captura real de monitor e janela no Windows (Windows Graphics Capture, com a borda amarela desligável), encode H.264 por NVENC pelo FFmpeg com fallback por software e aviso, e envio pelo `webrtc` a 1080p60 (60,0 fps, 0 perdas, ida e volta p50 de 83 ms entre redes). Pendências levadas adiante: pedido de quadro-chave pelo espectador (PLI) e partida mais rápida do bitrate para o M6; lista de opções de resolução e FPS vinda do hardware e da fonte (RF-05, RF-22) para o M4; predefinições de qualidade com conteúdo real e NVENC com janela, a medir. | Mantenedor |
 | DEC-61 | Biblioteca de UI: **egui**, com `eframe` e o backend wgpu (DEC-40), por ter o caminho de vídeo mais direto (pintura personalizada no `RenderPass` do wgpu, para YUV→RGB com shader próprio), licença compatível com a DEC-51 e a maior comunidade. A Slint fica descartada pela licença (GPL-3.0 ou "Royalty-free" proprietária) e pelo import de textura instável. O `iced` é o plano B se o spike M4a de vídeo (3 ou mais streams de 1080p60 a 60 fps com pouca CPU) falhar. Detalhes em `docs/UI-BIBLIOTECA.md`. | Mantenedor (aceitou proposta) |
 | DEC-62 | Ao assistir, a pessoa escolhe como o vídeo ocupa o espaço: **manter a proporção** (padrão, com barras onde sobrar espaço, sem cortar nada) ou **preencher** (centralizado, cortando as bordas que não cabem). A escolha é local, vale para todos os cartões, fica salva e não afeta quem transmite nem os outros espectadores. Em tela cheia com um vídeo em primeiro plano somem moldura, margem e cantos arredondados. | Mantenedor (confirmou a proposta) |
+| DEC-63 | Codec de áudio: **Opus** (48 kHz, estéreo, quadros de 20 ms), pela biblioteca de referência **libopus** (crate `opus`). Exige `cmake` no ambiente de build. Se isso virar problema, compara-se com o `opus-rs` (Rust puro). | Mantenedor (aceitou proposta) |
+| DEC-64 | O microfone é **misturado** ao áudio da transmissão, numa só faixa (DEC-16). Uma faixa separada para silenciar só a voz fica fora do MVP. | Mantenedor (aceitou proposta) |
+| DEC-65 | O áudio por aplicativo e a exclusão de aplicativos (DEC-16) exigem **Windows 10 versão 2004 ou mais novo**, por causa da captura de áudio por processo do WASAPI. Em versões anteriores o app avisa na interface. | Mantenedor (aceitou proposta) |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -104,7 +107,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-62.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-65.
 
 ## 5. Fora do escopo
 
