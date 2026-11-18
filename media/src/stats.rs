@@ -28,8 +28,14 @@ pub struct Sending {
     pub hardware: bool,
     pub width: u32,
     pub height: u32,
+    /// Pictures leaving the encoder loop per second.
     pub fps: f32,
+    /// New pictures the capture delivered per second: a still screen, or a
+    /// game locked to a low rate, delivers fewer than `fps`.
+    pub capture_fps: f32,
     pub kbps: f32,
+    /// Taking the current picture from the capture, per picture.
+    pub copy_ms: f32,
     /// Time inside the encoder per picture.
     pub encode_ms: f32,
 }

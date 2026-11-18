@@ -278,13 +278,15 @@ impl TelinhasApp {
         let mut lines: Vec<String> = Vec::new();
         if let Some(s) = &stats.sending {
             lines.push(format!(
-                "ENVIANDO  {} ({})  {}x{}  {:.0} fps  {:.1} Mbps  codifica em {:.1} ms",
+                "ENVIANDO  {} ({})  {}x{}  captura {:.0} fps  envio {:.0} fps  {:.1} Mbps  cópia {:.1} ms  codifica em {:.1} ms",
                 s.encoder,
                 if s.hardware { "hardware" } else { "software" },
                 s.width,
                 s.height,
+                s.capture_fps,
                 s.fps,
                 s.kbps / 1000.0,
+                s.copy_ms,
                 s.encode_ms
             ));
             for (peer, path) in &stats.viewers {

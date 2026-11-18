@@ -50,7 +50,13 @@ impl BroadcastSpec {
         Self {
             source,
             fps,
-            quality: 23,
+            // Lower is better. 23 gave about 8.8 Mbps at 1080p on a game and
+            // looked soft; the ceiling was not the limit. `TELINHAS_CQ` is for
+            // trying values without rebuilding.
+            quality: std::env::var("TELINHAS_CQ")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(20),
             max_kbps,
             backend: Backend::Auto,
             cursor: true,
@@ -108,6 +114,8 @@ enum Frames {
     },
     Capture {
         latest: Arc<Mutex<Latest>>,
+        /// How many pictures the capture has delivered so far.
+        delivered: Arc<AtomicU64>,
         session: capture::Session,
     },
 }
@@ -127,6 +135,8 @@ impl Frames {
         capture::init_dpi_awareness();
         let latest: Arc<Mutex<Latest>> = Arc::default();
         let sink = Arc::clone(&latest);
+        let delivered = Arc::new(AtomicU64::new(0));
+        let counter = Arc::clone(&delivered);
         let session = capture::start(
             source,
             CaptureOptions {
@@ -136,6 +146,7 @@ impl Frames {
             },
             move |frame| {
                 // Even sizes only: H.264 needs them.
+                counter.fetch_add(1, Ordering::Relaxed);
                 let (w, h) = (frame.width & !1, frame.height & !1);
                 let mut latest = sink.lock().unwrap();
                 latest.width = w;
@@ -154,7 +165,18 @@ impl Frames {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        Ok(Self::Capture { latest, session })
+        Ok(Self::Capture {
+            latest,
+            delivered,
+            session,
+        })
+    }
+
+    fn delivered(&self) -> u64 {
+        match self {
+            Self::Synthetic { .. } => 0,
+            Self::Capture { delivered, .. } => delivered.load(Ordering::Relaxed),
+        }
     }
 
     fn size(&self) -> (u32, u32) {
@@ -284,6 +306,7 @@ fn run(
     let mut tick = 0u64;
     let mut picture = Vec::new();
     let (mut window, mut window_frames, mut window_bytes) = (Instant::now(), 0u32, 0usize);
+    let mut window_delivered = 0u64;
     while !stop.load(Ordering::Relaxed) {
         let wanted = pick(headroom);
         if wanted.abs_diff(kbps) * 100 / kbps.max(1) > CEILING_STEP_PERCENT
@@ -299,6 +322,7 @@ fn run(
 
         let captured_at = Instant::now();
         let (w, h) = frames.fill(tick, &mut picture);
+        let copy_ms = captured_at.elapsed().as_secs_f32() * 1000.0;
         if (w, h) != (width, height) {
             // The source changed size (a window was resized): open the
             // encoder again at the new size. It starts with a keyframe.
@@ -333,7 +357,11 @@ fn run(
             sending.width = w;
             sending.height = h;
             sending.encode_ms = smooth(sending.encode_ms, encode_ms);
+            sending.copy_ms = smooth(sending.copy_ms, copy_ms);
             if elapsed >= 1.0 {
+                let delivered = frames.delivered();
+                sending.capture_fps = (delivered - window_delivered) as f32 / elapsed;
+                window_delivered = delivered;
                 sending.fps = window_frames as f32 / elapsed;
                 sending.kbps = window_bytes as f32 * 8.0 / 1000.0 / elapsed;
                 (window, window_frames, window_bytes) = (Instant::now(), 0, 0);
