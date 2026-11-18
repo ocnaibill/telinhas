@@ -440,6 +440,9 @@ mod tests {
             room.broadcasting = true;
         }
         frames(&mut app, 3);
+        // Full screen drops the frame around the picture.
+        app.fullscreen = true;
+        frames(&mut app, 3);
     }
 
     #[test]

@@ -430,7 +430,7 @@ impl TelinhasApp {
             .frame(
                 egui::Frame::new()
                     .fill(theme::BG)
-                    .inner_margin(egui::Margin::same(14)),
+                    .inner_margin(egui::Margin::same(if self.fullscreen { 0 } else { 14 })),
             )
             .show(ui, |ui| {
                 let visible: Vec<usize> = room
@@ -560,19 +560,36 @@ impl TelinhasApp {
         let stream = &room.streams[index];
         let painter = ui.painter_at(rect.expand(3.0));
         let is_mine = stream.owner == self.nickname;
-        painter.rect_filled(rect, CornerRadius::same(16), theme::CARD);
-        let inner = rect.shrink(3.0);
+        // Full screen with one picture in front: nothing but the picture, no
+        // frame, border or rounded corners, so it uses every pixel.
+        let immersive = self.fullscreen
+            && large
+            && (room.layout == RoomLayout::Focus || room.streams.len() == 1);
+        let (radius, video_radius) = if immersive { (0, 0.0) } else { (16, 13.0) };
+        painter.rect_filled(
+            rect,
+            CornerRadius::same(radius),
+            if immersive {
+                Color32::BLACK
+            } else {
+                theme::CARD
+            },
+        );
+        let inner = if immersive { rect } else { rect.shrink(3.0) };
         let frame = match &self.media {
             // What others send comes from the network; my own is not echoed back.
             Some(media) => stream.owner_id.and_then(|id| media.latest(id)),
             None => self.mock.get(index).map(|source| source.frame()),
         };
         if let Some(frame) = frame {
+            // Keep the picture's proportions: the tile may be any shape, and
+            // stretching it to fit squashes the video.
+            let shown = fit(inner, frame.width, frame.height);
             painter.add(video::shape(VideoCallback {
                 id: index,
                 frame,
-                rect: inner,
-                radius: 13.0,
+                rect: shown,
+                radius: video_radius,
             }));
         } else if self.media.is_some() {
             let text = if is_mine {
@@ -594,12 +611,14 @@ impl TelinhasApp {
         } else {
             theme::STROKE
         };
-        painter.rect_stroke(
-            rect,
-            CornerRadius::same(16),
-            Stroke::new(2.0, border),
-            StrokeKind::Inside,
-        );
+        if !immersive {
+            painter.rect_stroke(
+                rect,
+                CornerRadius::same(16),
+                Stroke::new(2.0, border),
+                StrokeKind::Inside,
+            );
+        }
 
         let mut cursor = inner.min + Vec2::new(12.0, 12.0);
         let live = format!("●  AO VIVO  {}p{}", stream.height, stream.fps);
@@ -764,6 +783,21 @@ impl TelinhasApp {
     }
 }
 
+/// The largest rectangle with the picture's proportions that fits in `area`,
+/// centered: bars on the sides or above and below instead of stretching.
+fn fit(area: Rect, width: u32, height: u32) -> Rect {
+    if width == 0 || height == 0 {
+        return area;
+    }
+    let aspect = width as f32 / height as f32;
+    let size = if area.width() / area.height().max(1.0) > aspect {
+        Vec2::new(area.height() * aspect, area.height())
+    } else {
+        Vec2::new(area.width(), area.width() / aspect)
+    };
+    Rect::from_center_size(area.center(), size)
+}
+
 /// A pill drawn directly with a painter, returning its rectangle.
 fn pill_at(painter: &egui::Painter, at: Pos2, text: &str, fill: Color32, color: Color32) -> Rect {
     let galley = painter.layout_no_wrap(text.to_owned(), FontId::proportional(12.0), color);
@@ -913,4 +947,24 @@ fn participant_row(
             }
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_picture_keeps_its_proportions_inside_any_tile() {
+        let wide = Rect::from_min_size(Pos2::ZERO, Vec2::new(1000.0, 400.0));
+        let shown = fit(wide, 1920, 1080);
+        assert!((shown.width() / shown.height() - 16.0 / 9.0).abs() < 0.01);
+        assert!(shown.height() <= 400.0 + 0.01 && shown.center() == wide.center());
+        let tall = Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 1000.0));
+        let shown = fit(tall, 1920, 1080);
+        assert!((shown.width() / shown.height() - 16.0 / 9.0).abs() < 0.01);
+        assert!(shown.width() <= 400.0 + 0.01);
+        // A tile of the same shape is used whole.
+        let same = Rect::from_min_size(Pos2::ZERO, Vec2::new(1920.0, 1080.0));
+        assert_eq!(fit(same, 1920, 1080), same);
+    }
 }
