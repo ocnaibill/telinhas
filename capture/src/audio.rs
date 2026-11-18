@@ -32,6 +32,8 @@ pub struct AudioApp {
     pub pid: u32,
     /// The program's file name, such as `chrome.exe`.
     pub process: String,
+    /// The output device it plays on, such as `Browser (Fifine Genie)`.
+    pub device: String,
     /// Playing right now.
     pub active: bool,
 }

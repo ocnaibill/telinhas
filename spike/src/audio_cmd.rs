@@ -15,15 +15,16 @@ pub fn run(mode: &str, seconds: u64, exclude: &[String], out: &str) -> Result<()
     if mode == "list" {
         let apps = audio::list_audio_apps().context("listing the audio sessions")?;
         println!(
-            "{} program(s) with an audio session on the default output:",
+            "{} program(s) with an audio session on any output device:",
             apps.len()
         );
         for app in apps {
             println!(
-                "  pid {:>6}  {:<28} {}",
+                "  pid {:>6}  {:<26} {:<8} on {}",
                 app.pid,
                 app.process,
-                if app.active { "playing" } else { "quiet" }
+                if app.active { "playing" } else { "quiet" },
+                app.device
             );
         }
         return Ok(());

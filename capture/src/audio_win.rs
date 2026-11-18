@@ -63,32 +63,57 @@ fn lineage(system: &System, pid: u32) -> Vec<u32> {
     out
 }
 
-/// The audio sessions on the default output device: `(pid, active)`.
-fn sessions() -> Result<Vec<(u32, bool)>> {
+/// One audio session: which program, where it plays, whether it makes sound now.
+struct Session {
+    pid: u32,
+    device: String,
+    active: bool,
+}
+
+/// The audio sessions on every output device, not only the default one: a
+/// virtual mixer (such as Fifine Genie) gives each kind of sound its own
+/// output, and a program may play on any of them.
+fn sessions() -> Result<Vec<Session>> {
     let enumerator = DeviceEnumerator::new().map_err(os)?;
-    let device = enumerator
-        .get_default_device(Direction::Render)
+    let devices = enumerator
+        .get_device_collection(Direction::Render)
         .map_err(os)?;
-    let manager = device.get_iaudiosessionmanager().map_err(os)?;
-    let list = manager.get_audiosessionenumerator().map_err(os)?;
-    let count = list.get_count().map_err(os)?;
     let mut out = Vec::new();
-    for i in 0..count {
-        let Ok(control) = list.get_session(i) else {
+    for device in &devices {
+        let Ok(device) = device else {
             continue;
         };
-        let Ok(state) = control.get_state() else {
+        let name = device.get_friendlyname().unwrap_or_default();
+        let Ok(manager) = device.get_iaudiosessionmanager() else {
             continue;
         };
-        if state == SessionState::Expired {
-            continue;
-        }
-        let Ok(pid) = control.get_process_id() else {
+        let Ok(list) = manager.get_audiosessionenumerator() else {
             continue;
         };
-        // Process 0 is the system's own sounds, which cannot be targeted.
-        if pid != 0 {
-            out.push((pid, state == SessionState::Active));
+        let Ok(count) = list.get_count() else {
+            continue;
+        };
+        for i in 0..count {
+            let Ok(control) = list.get_session(i) else {
+                continue;
+            };
+            let Ok(state) = control.get_state() else {
+                continue;
+            };
+            if state == SessionState::Expired {
+                continue;
+            }
+            let Ok(pid) = control.get_process_id() else {
+                continue;
+            };
+            // Process 0 is the system's own sounds, which cannot be targeted.
+            if pid != 0 {
+                out.push(Session {
+                    pid,
+                    device: name.clone(),
+                    active: state == SessionState::Active,
+                });
+            }
         }
     }
     Ok(out)
@@ -99,10 +124,11 @@ pub fn list_apps() -> Result<Vec<AudioApp>> {
     let system = processes();
     let mut apps: Vec<AudioApp> = sessions()?
         .into_iter()
-        .map(|(pid, active)| AudioApp {
-            pid,
-            process: process_name(&system, pid),
-            active,
+        .map(|session| AudioApp {
+            pid: session.pid,
+            process: process_name(&system, session.pid),
+            device: session.device,
+            active: session.active,
         })
         .collect();
     apps.sort_by(|a, b| a.process.cmp(&b.process).then(a.pid.cmp(&b.pid)));
@@ -399,7 +425,7 @@ fn discover(exclude: &[String], taps: &Mutex<Vec<Tap>>, stop: &AtomicBool) {
         if let Ok(found) = sessions() {
             let system = processes();
             let mut wanted: HashMap<u32, String> = HashMap::new();
-            'session: for (pid, _) in found {
+            'session: for Session { pid, .. } in found {
                 let lineage = lineage(&system, pid);
                 // The app's own sound, and any program the person left out
                 // (or one of its children).
