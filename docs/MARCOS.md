@@ -83,6 +83,8 @@ Dividido em etapas (DEC-61 escolheu o egui; o spike M4a passou):
 - Ensaio com 12 pessoas e medição das metas de RNF.
 - Instaladores por sistema (RNF-26).
 
+**Andamento do Linux** (`docs/PLANO-M7-LINUX.md`): L1 (compila e roda) pronto; L2 (captura de vídeo pelo portal e PipeWire) e L3 (captura de áudio pelo PipeWire) escritos e com testes das partes puras, **ainda sem prova** num desktop Wayland real; L4 a L6 (encode, AppImage, prova entre Windows e Linux) por fazer.
+
 **Saída:** versão 0.1 publicada, com os números medidos de cada RNF registrados e as metas revisadas.
 
 ## Pontos ainda sem decisão

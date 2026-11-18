@@ -380,7 +380,7 @@ impl Sources {
             _ if capture::capture_support().is_ok() && cfg!(target_os = "linux") => Self {
                 monitors: Vec::new(),
                 windows: Vec::new(),
-                audio_apps: Vec::new(),
+                audio_apps: audio_app_names(&[]),
                 is_demo: false,
                 capture_unavailable: false,
                 portal: true,

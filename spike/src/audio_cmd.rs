@@ -45,7 +45,9 @@ pub fn run(mode: &str, seconds: u64, exclude: &[String], mic: bool, out: &str) -
     let capture = audio::start_audio(Some(source), mic, move |frame| {
         sink.lock().unwrap().extend_from_slice(frame);
     })
-    .context("starting the audio capture (needs Windows 10 version 2004 or newer)")?;
+    .context(
+        "starting the audio capture (Windows 10 version 2004 or newer, or PipeWire on Linux)",
+    )?;
     println!("capturing {mode} for {seconds} s; play something now");
     if !exclude.is_empty() {
         println!("leaving out: {}", exclude.join(", "));

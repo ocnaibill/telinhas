@@ -1,8 +1,9 @@
 //! Audio capture: what the system or one application plays, as a stream of
 //! 20 ms frames (48 kHz, stereo, 32-bit float) ready for the Opus encoder.
 //!
-//! Only Windows is implemented (WASAPI process loopback, Windows 10 version
-//! 2004 or newer, DEC-65). Elsewhere every call returns [`Error::Unsupported`].
+//! Windows uses WASAPI process loopback (Windows 10 version 2004 or newer,
+//! DEC-65) and Linux uses PipeWire. Elsewhere every call returns
+//! [`Error::Unsupported`].
 //!
 //! Windows can capture "one process and its children" or "everything except
 //! one process and its children", but not "everything except these several".
@@ -68,7 +69,11 @@ pub(crate) type FrameSink = Box<dyn FnMut(&[f32]) + Send>;
 #[path = "audio_win.rs"]
 mod imp;
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+#[path = "audio_linux.rs"]
+mod imp;
+
+#[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
     use super::*;
 

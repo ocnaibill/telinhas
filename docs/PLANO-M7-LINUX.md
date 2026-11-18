@@ -7,8 +7,8 @@ Objetivo: o Linux faz **tudo** o que o Windows faz hoje: transmitir tela ou jane
 | Peça | Windows | Linux hoje |
 |------|---------|------------|
 | Interface, sala, rede, decodificação, reprodução de som | pronto | **pronto** (compila e usa ALSA pelo `cpal`) |
-| Captura de vídeo | Windows Graphics Capture | falta |
-| Captura de áudio (aplicativo, sistema, exclusões) | WASAPI process loopback | falta |
+| Captura de vídeo | Windows Graphics Capture | escrita (portal + PipeWire), sem prova |
+| Captura de áudio (aplicativo, sistema, exclusões) | WASAPI process loopback | escrita (PipeWire), sem prova |
 | Encode por hardware | NVENC (FFmpeg) | falta (NVENC compila igual; VAAPI para AMD e Intel não existe) |
 | Encode por software | openh264 | pronto |
 | Instalador e atualização | Inno Setup + atualizador | falta (AppImage) |
@@ -21,6 +21,8 @@ Objetivo: o Linux faz **tudo** o que o Windows faz hoje: transmitir tela ou jane
 - *uma janela*: captura o nó do programa dono da janela e dos processos que ele criou (o PID vem do portal, ou da lista de nós);
 - *tela inteira*: um stream por nó de aplicativo que não foi excluído, misturados, acompanhando quem começa e para de tocar, sempre sem o próprio Telinhas.
 A mistura de 20 ms em 48 kHz estéreo e o codificador Opus são os que já existem.
+
+Como ficou (`capture/src/audio_linux.rs`): cada programa que toca som é um nó `Stream/Output/Audio`; um stream de captura apontado para o nó (`target.object`) recebe o que ele toca sem tirar do alto-falante. O registro do PipeWire avisa quando um programa começa e para, e a árvore de processos vem de `/proc`. O portal de captura não diz de qual programa é a janela escolhida, então no Linux o som é sempre "o do computador, menos os aplicativos excluídos e o próprio Telinhas". Escolher um aplicativo só para uma janela fica como melhoria.
 
 **Encode.** O NVENC pelo FFmpeg reaproveita o código do Windows. **VAAPI** (AMD e Intel) precisa de superfícies de GPU e tem mais detalhe. Sem hardware, o openh264 por software serve, mas não sustenta 1080p60: o app já avisa quando cai no software (DEC-15). A ordem é NVENC e software primeiro, e VAAPI depois.
 

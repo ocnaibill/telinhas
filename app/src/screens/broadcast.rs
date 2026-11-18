@@ -164,11 +164,17 @@ impl TelinhasApp {
             // Sound: a window brings its own program's, a screen brings the
             // system's minus what the person left out. Without capture support
             // (the demonstration sources) a tone stands in, to hear the path.
-            let audio = if !draft.system_audio || self.sources.portal {
-                // (On Linux the sound of the broadcast is the next step.)
+            let audio = if !draft.system_audio {
                 None
             } else if self.sources.is_demo {
                 Some(telinhas_media::AudioInput::Synthetic)
+            } else if self.sources.portal {
+                // The desktop's dialog does not say which program owns the
+                // window that was picked, so the sound is the system's minus
+                // what the person left out.
+                Some(telinhas_media::AudioInput::System {
+                    exclude: draft.excluded_apps.clone(),
+                })
             } else {
                 match draft.tab {
                     SourceTab::Screens => Some(telinhas_media::AudioInput::System {
@@ -405,28 +411,24 @@ impl TelinhasApp {
                     },
                     &mut draft.mouse,
                 );
-                if sources.portal {
-                    ui.label(
-                        RichText::new("O som da transmissão no Linux é o próximo passo e ainda não vai junto.")
-                            .small()
-                            .color(theme::AMBER),
-                    );
-                } else {
-                    toggle_row(
-                        ui,
-                        theme::icons::SPEAKER_HIGH,
-                        "Áudio do sistema",
+                toggle_row(
+                    ui,
+                    theme::icons::SPEAKER_HIGH,
+                    "Áudio do sistema",
+                    if sources.portal {
+                        "Todo o áudio do computador, menos o dos aplicativos excluídos"
+                    } else {
                         match draft.tab {
                             SourceTab::Screens => {
                                 "Todo o áudio da tela, menos o dos aplicativos excluídos"
                             }
                             SourceTab::Windows => "Só o áudio da janela escolhida",
-                        },
-                        &mut draft.system_audio,
-                    );
-                    if draft.tab == SourceTab::Screens && draft.system_audio {
-                        excluded_apps(ui, draft, &sources.audio_apps);
-                    }
+                        }
+                    },
+                    &mut draft.system_audio,
+                );
+                if (sources.portal || draft.tab == SourceTab::Screens) && draft.system_audio {
+                    excluded_apps(ui, draft, &sources.audio_apps);
                 }
                 if crate::app::MIC_AND_CAMERA {
                     toggle_row(
