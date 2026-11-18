@@ -51,6 +51,7 @@ pub fn run(mode: &str, seconds: u64, exclude: &[String], out: &str) -> Result<()
         println!("leaving out: {}", exclude.join(", "));
     }
 
+    let cpu_before = telinhas_capture::process_cpu_seconds();
     let started = Instant::now();
     let mut printed = 0;
     while started.elapsed() < Duration::from_secs(seconds) {
@@ -72,8 +73,16 @@ pub fn run(mode: &str, seconds: u64, exclude: &[String], out: &str) -> Result<()
         }
     }
     let stats = capture.stats();
+    let cpu_after = telinhas_capture::process_cpu_seconds();
+    let wall = started.elapsed().as_secs_f64();
     drop(capture);
 
+    if let (Some(before), Some(after)) = (cpu_before, cpu_after) {
+        println!(
+            "\nCPU used by the capture and mix: {:.1}% of one core",
+            (after - before) / wall * 100.0
+        );
+    }
     let expected = seconds * 50;
     println!(
         "\n20 ms frames delivered: {} (expected about {expected})",
