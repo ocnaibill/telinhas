@@ -18,6 +18,16 @@ pub(crate) const NICKNAME_KEY: &str = "nickname";
 pub(crate) const SERVER_KEY: &str = "server";
 pub(crate) const FILL_KEY: &str = "fill_video";
 
+/// The beta transmits screens and windows with their sound. The microphone and
+/// the webcam are not there yet, so they are not offered. The code stays, ready
+/// for when they are.
+pub(crate) const MIC_AND_CAMERA: bool = false;
+
+/// A server built into this binary, set when it is compiled with
+/// `TELINHAS_DEFAULT_SERVER`. The versions for friends have it, so nobody
+/// types an address; it is not even shown.
+pub(crate) const BAKED_SERVER: Option<&str> = option_env!("TELINHAS_DEFAULT_SERVER");
+
 pub(crate) enum Modal {
     None,
     Broadcast(Box<BroadcastDraft>),
@@ -348,8 +358,8 @@ impl eframe::App for TelinhasApp {
     }
 }
 
-/// The server address: `--server URL`, then `TELINHAS_SERVER`, then what was
-/// saved last time.
+/// The server address: `--server URL`, then `TELINHAS_SERVER`, then the one
+/// built into this binary, then what was saved last time.
 fn server_setting(storage: Option<&dyn eframe::Storage>) -> String {
     let mut args = std::env::args();
     while let Some(arg) = args.next() {
@@ -363,6 +373,10 @@ fn server_setting(storage: Option<&dyn eframe::Storage>) -> String {
         && !value.trim().is_empty()
     {
         return value;
+    }
+    // Built in: it wins over what an older version saved.
+    if let Some(server) = BAKED_SERVER.filter(|s| !s.trim().is_empty()) {
+        return server.to_owned();
     }
     storage
         .and_then(|s| s.get_string(SERVER_KEY))

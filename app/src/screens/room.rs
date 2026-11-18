@@ -753,21 +753,25 @@ impl TelinhasApp {
                             {
                                 actions.open_broadcast = true;
                             }
-                            let camera = if room.camera_on {
-                                theme::icons::VIDEO_CAMERA
-                            } else {
-                                theme::icons::VIDEO_CAMERA_SLASH
-                            };
-                            if theme::icon_button(ui, camera, "Câmera", room.camera_on).clicked() {
-                                room.camera_on = !room.camera_on;
-                            }
-                            let mic = if room.mic_on {
-                                theme::icons::MICROPHONE
-                            } else {
-                                theme::icons::MICROPHONE_SLASH
-                            };
-                            if theme::icon_button(ui, mic, "Microfone", room.mic_on).clicked() {
-                                room.mic_on = !room.mic_on;
+                            if crate::app::MIC_AND_CAMERA {
+                                let camera = if room.camera_on {
+                                    theme::icons::VIDEO_CAMERA
+                                } else {
+                                    theme::icons::VIDEO_CAMERA_SLASH
+                                };
+                                if theme::icon_button(ui, camera, "Câmera", room.camera_on)
+                                    .clicked()
+                                {
+                                    room.camera_on = !room.camera_on;
+                                }
+                                let mic = if room.mic_on {
+                                    theme::icons::MICROPHONE
+                                } else {
+                                    theme::icons::MICROPHONE_SLASH
+                                };
+                                if theme::icon_button(ui, mic, "Microfone", room.mic_on).clicked() {
+                                    room.mic_on = !room.mic_on;
+                                }
                             }
                             if theme::icon_button(
                                 ui,

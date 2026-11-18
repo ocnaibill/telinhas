@@ -395,20 +395,22 @@ impl TelinhasApp {
                 if draft.tab == SourceTab::Screens && draft.system_audio {
                     excluded_apps(ui, draft, &sources.audio_apps);
                 }
-                toggle_row(
-                    ui,
-                    theme::icons::MICROPHONE,
-                    "Microfone",
-                    "Desligado por padrão",
-                    &mut draft.mic,
-                );
-                toggle_row(
-                    ui,
-                    theme::icons::VIDEO_CAMERA,
-                    "Webcam em picture-in-picture",
-                    "A webcam vai como um vídeo separado, que cada pessoa posiciona",
-                    &mut draft.webcam,
-                );
+                if crate::app::MIC_AND_CAMERA {
+                    toggle_row(
+                        ui,
+                        theme::icons::MICROPHONE,
+                        "Microfone",
+                        "Desligado por padrão",
+                        &mut draft.mic,
+                    );
+                    toggle_row(
+                        ui,
+                        theme::icons::VIDEO_CAMERA,
+                        "Webcam em picture-in-picture",
+                        "A webcam vai como um vídeo separado, que cada pessoa posiciona",
+                        &mut draft.webcam,
+                    );
+                }
             });
 
         // ---- estimate (RF-06)

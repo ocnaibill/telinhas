@@ -71,7 +71,10 @@ impl TelinhasApp {
                     self.home.target = self.home.natural[0].max(self.home.natural[1]);
                 });
                 ui.add_space(24.0);
-                self.server_row(ui);
+                // A build with a server inside has nothing to type.
+                if crate::app::BAKED_SERVER.is_none_or(|s| s.trim().is_empty()) {
+                    self.server_row(ui);
+                }
             });
         });
         self.link_overlay(&ui.ctx().clone());
@@ -220,7 +223,7 @@ impl TelinhasApp {
                 (
                     EntryMode::Watching,
                     "Assistindo",
-                    "Microfone e tela desligados",
+                    "Só assiste, sem transmitir",
                 ),
                 (
                     EntryMode::Broadcasting,
