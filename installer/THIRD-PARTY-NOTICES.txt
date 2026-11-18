@@ -1,0 +1,16 @@
+Telinhas uses third-party software. The main pieces are listed here; the full
+list of Rust libraries and their licenses comes with the source code.
+
+FFmpeg (the .dll files next to telinhas.exe)
+  Licensed under the GNU Lesser General Public License, version 2.1 or later.
+  These are unmodified shared libraries from an LGPL build, so you can replace
+  them with your own build. Source and license: https://ffmpeg.org
+
+Opus audio codec (libopus, built into telinhas.exe)
+  Licensed under the BSD 3-clause license. https://opus-codec.org
+
+OpenH264 (video codec, built into telinhas.exe)
+  Licensed under the BSD 2-clause license. https://github.com/cisco/openh264
+
+Rust libraries (built into telinhas.exe)
+  Mostly under the MIT and Apache-2.0 licenses.
