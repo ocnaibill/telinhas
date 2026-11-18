@@ -12,7 +12,7 @@ use eframe::wgpu;
 pub use telinhas_media::Picture as Frame;
 
 const SHADER: &str = r#"
-struct Uniforms { size_px: vec2<f32>, radius_px: f32, _pad: f32 };
+struct Uniforms { size_px: vec2<f32>, radius_px: f32, _pad: f32, uv_offset: vec2<f32>, uv_scale: vec2<f32> };
 struct VsOut { @builtin(position) pos: vec4<f32>, @location(0) uv: vec2<f32> };
 
 @group(0) @binding(0) var tex_y: texture_2d<f32>;
@@ -39,9 +39,12 @@ fn rounded_alpha(uv: vec2<f32>) -> f32 {
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    let y = textureSample(tex_y, samp, in.uv).r;
-    let cb = textureSample(tex_u, samp, in.uv).r - 0.5;
-    let cr = textureSample(tex_v, samp, in.uv).r - 0.5;
+    // `uv` covers the tile (for the rounded corners); the picture is sampled
+    // through a window onto it, which is how "fill" crops the edges.
+    let tuv = u.uv_offset + in.uv * u.uv_scale;
+    let y = textureSample(tex_y, samp, tuv).r;
+    let cb = textureSample(tex_u, samp, tuv).r - 0.5;
+    let cr = textureSample(tex_v, samp, tuv).r - 0.5;
     let yy = 1.1643836 * (y - 0.0627451);
     let rgb = vec3(
         yy + 1.5960268 * cr,
@@ -181,7 +184,7 @@ impl VideoGpu {
         ];
         let uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("video uniform"),
-            size: 16,
+            size: 32,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -232,6 +235,9 @@ pub struct VideoCallback {
     pub rect: egui::Rect,
     /// Corner radius in points.
     pub radius: f32,
+    /// The part of the picture to show: `[x, y, width, height]` as fractions
+    /// of the picture. `[0, 0, 1, 1]` is all of it.
+    pub crop: [f32; 4],
 }
 
 impl CallbackTrait for VideoCallback {
@@ -279,10 +285,13 @@ impl CallbackTrait for VideoCallback {
                 }
             }
             let ppp = screen.pixels_per_point;
-            let mut bytes = [0u8; 16];
+            let mut bytes = [0u8; 32];
             bytes[0..4].copy_from_slice(&(self.rect.width() * ppp).to_ne_bytes());
             bytes[4..8].copy_from_slice(&(self.rect.height() * ppp).to_ne_bytes());
             bytes[8..12].copy_from_slice(&(self.radius * ppp).to_ne_bytes());
+            for (i, value) in self.crop.iter().enumerate() {
+                bytes[16 + i * 4..20 + i * 4].copy_from_slice(&value.to_ne_bytes());
+            }
             queue.write_buffer(&tile.uniform, 0, &bytes);
         }
         Vec::new()

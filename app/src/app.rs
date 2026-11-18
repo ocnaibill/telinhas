@@ -16,6 +16,7 @@ use crate::video::VideoGpu;
 
 pub(crate) const NICKNAME_KEY: &str = "nickname";
 pub(crate) const SERVER_KEY: &str = "server";
+pub(crate) const FILL_KEY: &str = "fill_video";
 
 pub(crate) enum Modal {
     None,
@@ -91,6 +92,9 @@ pub struct TelinhasApp {
     pub(crate) fullscreen: bool,
     /// The numbers panel over the video (F3).
     pub(crate) diagnostics: bool,
+    /// Fill the tile and cut the edges, instead of keeping the proportions
+    /// (DEC-62). A local choice of whoever watches.
+    pub(crate) fill_video: bool,
     pub(crate) wake: Option<egui::Context>,
 }
 
@@ -118,6 +122,10 @@ impl TelinhasApp {
         let server = server_setting(cc.storage);
         let mut app = Self::build(nickname, Sources::load());
         app.wake = Some(cc.egui_ctx.clone());
+        app.fill_video = cc
+            .storage
+            .and_then(|s| s.get_string(FILL_KEY))
+            .is_some_and(|v| v == "true");
         app.set_server(&server);
         app
     }
@@ -212,6 +220,7 @@ impl TelinhasApp {
             reconnecting: false,
             fullscreen: false,
             diagnostics: false,
+            fill_video: false,
             wake: None,
         }
     }
@@ -323,6 +332,7 @@ impl eframe::App for TelinhasApp {
             storage.set_string(NICKNAME_KEY, self.nickname.clone());
         }
         storage.set_string(SERVER_KEY, self.server.clone());
+        storage.set_string(FILL_KEY, self.fill_video.to_string());
     }
 }
 
@@ -442,6 +452,8 @@ mod tests {
         frames(&mut app, 3);
         // Full screen drops the frame around the picture.
         app.fullscreen = true;
+        frames(&mut app, 3);
+        app.fill_video = true;
         frames(&mut app, 3);
     }
 

@@ -22,6 +22,7 @@ struct Actions {
     stop_broadcast: bool,
     copy_code: bool,
     fullscreen: bool,
+    fill: bool,
 }
 
 /// Capacity the room is sized for (DEC-03, DEC-24): above it, only a warning.
@@ -70,6 +71,11 @@ impl TelinhasApp {
         }
         self.join_request_popup(&ui.ctx().clone(), &mut room);
 
+        if actions.fill
+            || (!ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Z)))
+        {
+            self.fill_video = !self.fill_video;
+        }
         if actions.fullscreen {
             self.fullscreen = !self.fullscreen;
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
@@ -584,12 +590,17 @@ impl TelinhasApp {
         if let Some(frame) = frame {
             // Keep the picture's proportions: the tile may be any shape, and
             // stretching it to fit squashes the video.
-            let shown = fit(inner, frame.width, frame.height);
+            let (shown, crop) = if self.fill_video {
+                (inner, cover(inner, frame.width, frame.height))
+            } else {
+                (fit(inner, frame.width, frame.height), [0.0, 0.0, 1.0, 1.0])
+            };
             painter.add(video::shape(VideoCallback {
                 id: index,
                 frame,
                 rect: shown,
                 radius: video_radius,
+                crop,
             }));
         } else if self.media.is_some() {
             let text = if is_mine {
@@ -692,6 +703,7 @@ impl TelinhasApp {
                     frame: webcam.frame(),
                     rect: cam,
                     radius: 10.0,
+                    crop: [0.0, 0.0, 1.0, 1.0],
                 }));
                 painter.rect_stroke(
                     cam,
@@ -772,6 +784,19 @@ impl TelinhasApp {
                             if theme::icon_button(ui, icon, hint, self.fullscreen).clicked() {
                                 actions.fullscreen = true;
                             }
+                            let (fill_hint, fill_icon) = if self.fill_video {
+                                ("Manter a proporção do vídeo (Z)", theme::icons::CROP)
+                            } else {
+                                (
+                                    "Preencher a tela, cortando as bordas (Z)",
+                                    theme::icons::CROP,
+                                )
+                            };
+                            if theme::icon_button(ui, fill_icon, fill_hint, self.fill_video)
+                                .clicked()
+                            {
+                                actions.fill = true;
+                            }
                             if theme::danger_button(ui, format!("{}  Sair", theme::icons::SIGN_OUT))
                                 .clicked()
                             {
@@ -796,6 +821,25 @@ fn fit(area: Rect, width: u32, height: u32) -> Rect {
         Vec2::new(area.width(), area.width() / aspect)
     };
     Rect::from_center_size(area.center(), size)
+}
+
+/// The part of a picture that fills `area` with no bars, centered, as
+/// `[x, y, width, height]` fractions of the picture: the edges that do not fit
+/// are cut.
+fn cover(area: Rect, width: u32, height: u32) -> [f32; 4] {
+    if width == 0 || height == 0 || area.height() < 1.0 {
+        return [0.0, 0.0, 1.0, 1.0];
+    }
+    let picture = width as f32 / height as f32;
+    let tile = area.width() / area.height();
+    if tile > picture {
+        // A wider tile: show a band of the picture's height.
+        let h = picture / tile;
+        [0.0, (1.0 - h) / 2.0, 1.0, h]
+    } else {
+        let w = tile / picture;
+        [(1.0 - w) / 2.0, 0.0, w, 1.0]
+    }
 }
 
 /// A pill drawn directly with a painter, returning its rectangle.
@@ -963,6 +1007,23 @@ mod tests {
         let shown = fit(tall, 1920, 1080);
         assert!((shown.width() / shown.height() - 16.0 / 9.0).abs() < 0.01);
         assert!(shown.width() <= 400.0 + 0.01);
+        // Filling a wide tile with a 16:9 picture cuts the top and bottom.
+        let crop = cover(wide, 1920, 1080);
+        assert!(
+            (crop[2] - 1.0).abs() < 1e-6
+                && crop[3] < 1.0
+                && (crop[1] * 2.0 + crop[3] - 1.0).abs() < 1e-5
+        );
+        let crop = cover(tall, 1920, 1080);
+        assert!(crop[2] < 1.0 && (crop[3] - 1.0).abs() < 1e-6);
+        assert_eq!(
+            cover(
+                Rect::from_min_size(Pos2::ZERO, Vec2::new(1920.0, 1080.0)),
+                1920,
+                1080
+            ),
+            [0.0, 0.0, 1.0, 1.0]
+        );
         // A tile of the same shape is used whole.
         let same = Rect::from_min_size(Pos2::ZERO, Vec2::new(1920.0, 1080.0));
         assert_eq!(fit(same, 1920, 1080), same);
