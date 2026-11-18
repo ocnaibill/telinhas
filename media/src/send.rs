@@ -17,6 +17,7 @@ use tokio::sync::broadcast;
 
 use crate::Event;
 use crate::link::BWE_INITIAL;
+use crate::scale::{downscale, target_size};
 use crate::stamp;
 use crate::stats::{Sending, Stats, smooth};
 
@@ -40,6 +41,8 @@ pub struct BroadcastSpec {
     /// The most to send, in kbps, whatever the network estimate says.
     pub max_kbps: u32,
     pub backend: Backend,
+    /// Send at most this many lines (shrinking, never enlarging).
+    pub max_height: Option<u32>,
     pub cursor: bool,
     /// Leave the system's capture border on.
     pub border: bool,
@@ -59,6 +62,7 @@ impl BroadcastSpec {
                 .unwrap_or(20),
             max_kbps,
             backend: Backend::Auto,
+            max_height: None,
             cursor: true,
             border: false,
         }
@@ -272,7 +276,8 @@ fn run(
         },
         keyframe_every: 0,
     };
-    let (mut width, mut height) = frames.size();
+    let (source_w, source_h) = frames.size();
+    let (mut width, mut height) = target_size(source_w, source_h, spec.max_height);
     let mut kbps = pick(0.5);
     let created = telinhas_codec::create(spec.backend, options(width, height, kbps))?;
     let mut encoder = created.encoder;
@@ -305,6 +310,7 @@ fn run(
     let mut last_ceiling_change = Instant::now();
     let mut tick = 0u64;
     let mut picture = Vec::new();
+    let mut scaled = Vec::new();
     let (mut window, mut window_frames, mut window_bytes) = (Instant::now(), 0u32, 0usize);
     let mut window_delivered = 0u64;
     while !stop.load(Ordering::Relaxed) {
@@ -321,7 +327,23 @@ fn run(
         }
 
         let captured_at = Instant::now();
-        let (w, h) = frames.fill(tick, &mut picture);
+        let (source_w, source_h) = frames.fill(tick, &mut picture);
+        let (w, h) = target_size(source_w, source_h, spec.max_height);
+        if (w, h) != (source_w, source_h) {
+            downscale(
+                &picture,
+                source_w as usize,
+                source_h as usize,
+                w as usize,
+                h as usize,
+                &mut scaled,
+            );
+        }
+        let pixels: &[u8] = if (w, h) == (source_w, source_h) {
+            &picture
+        } else {
+            &scaled
+        };
         let copy_ms = captured_at.elapsed().as_secs_f32() * 1000.0;
         if (w, h) != (width, height) {
             // The source changed size (a window was resized): open the
@@ -334,7 +356,7 @@ fn run(
             width: w,
             height: h,
             stride: w as usize * 4,
-            bgra: &picture,
+            bgra: pixels,
         })?;
         let encode_ms = encode_started.elapsed().as_secs_f32() * 1000.0;
         let counter = tick as u32;

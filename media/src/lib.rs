@@ -13,6 +13,7 @@
 mod actor;
 mod link;
 mod picture;
+mod scale;
 mod send;
 mod stamp;
 mod stats;

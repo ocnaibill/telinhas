@@ -17,6 +17,11 @@ use crate::send::{BroadcastSpec, Encoded, Targets, spawn_broadcast};
 use crate::stats::{Path, Stats, smooth};
 use crate::{Command, Event, EventSender, Latest};
 
+/// A picture unconfirmed for this long is considered lost.
+const LOST_AFTER: Duration = Duration::from_secs(2);
+/// Never allow fewer pictures in flight than this, whatever the frame rate.
+const MIN_IN_FLIGHT: usize = 8;
+
 pub(crate) struct Shared {
     pub link: LinkConfig,
     pub events: EventSender,
@@ -38,6 +43,7 @@ struct Broadcast {
     need_key: Arc<AtomicBool>,
     targets: Targets,
     frames: broadcast::Sender<Arc<Encoded>>,
+    thread: std::thread::JoinHandle<()>,
 }
 
 /// Dropping `stop` tells the task to close its connection and end.
@@ -64,8 +70,11 @@ pub(crate) async fn run(shared: Shared, mut inbox: UnboundedReceiver<Command>) {
     while let Some(command) = inbox.recv().await {
         match command {
             Command::StartBroadcast { spec, viewers } => {
-                stop_broadcast(&shared, &mut state);
-                start_broadcast(&shared, &mut state, spec, viewers);
+                if state.broadcast.is_some() {
+                    switch_broadcast(&shared, &mut state, spec, viewers);
+                } else {
+                    start_broadcast(&shared, &mut state, spec, viewers);
+                }
             }
             Command::StopBroadcast => stop_broadcast(&shared, &mut state),
             Command::PeerJoined(peer) => {
@@ -112,7 +121,7 @@ fn start_broadcast(
     let stop = Arc::new(AtomicBool::new(false));
     let need_key = Arc::new(AtomicBool::new(false));
     let targets: Targets = Arc::default();
-    spawn_broadcast(
+    let thread = spawn_broadcast(
         spec,
         frames.clone(),
         Arc::clone(&stop),
@@ -129,9 +138,50 @@ fn start_broadcast(
         need_key,
         targets,
         frames,
+        thread,
     });
     for peer in viewers {
         start_outgoing(shared, state, peer);
+    }
+}
+
+/// Changes what is broadcast (another screen or window, a new size or rate)
+/// without touching the connections: only the encoder starts over, and its
+/// first picture is a keyframe (DEC-11, DEC-44).
+fn switch_broadcast(
+    shared: &Arc<Shared>,
+    state: &mut State,
+    spec: BroadcastSpec,
+    viewers: Vec<PeerId>,
+) {
+    let Some(old) = state.broadcast.take() else {
+        return;
+    };
+    old.stop.store(true, Ordering::Relaxed);
+    let _ = old.thread.join();
+    let stop = Arc::new(AtomicBool::new(false));
+    old.need_key.store(true, Ordering::Relaxed);
+    let thread = spawn_broadcast(
+        spec,
+        old.frames.clone(),
+        Arc::clone(&stop),
+        Arc::clone(&old.need_key),
+        Arc::clone(&old.targets),
+        Arc::clone(&shared.stats),
+        {
+            let shared = Arc::clone(shared);
+            Arc::new(move |event| shared.tell(event))
+        },
+    );
+    state.broadcast = Some(Broadcast {
+        stop,
+        thread,
+        ..old
+    });
+    for peer in viewers {
+        if !state.outgoing.contains_key(&peer) {
+            start_outgoing(shared, state, peer);
+        }
     }
 }
 
@@ -232,7 +282,17 @@ async fn drive_outgoing(
         tokio::select! {
             frame = frames.recv() => match frame {
                 Ok(encoded) => {
-                    sent.retain(|_, (captured, _)| captured.elapsed() < Duration::from_secs(5));
+                    // A picture whose confirmation did not come back in this
+                    // long is given up on.
+                    sent.retain(|_, (captured, _)| captured.elapsed() < LOST_AFTER);
+                    // Too many pictures still unconfirmed means the network
+                    // cannot keep up. Sending more only adds delay, so skip
+                    // this one and ask for a keyframe to start over from.
+                    let limit = (0.5 / encoded.duration.as_secs_f32().max(0.001)) as usize;
+                    if sent.len() > limit.max(MIN_IN_FLIGHT) {
+                        need_key.store(true, Ordering::Relaxed);
+                        continue;
+                    }
                     sent.insert(encoded.counter, (encoded.captured_at, Instant::now()));
                     link.write(encoded.data.clone(), encoded.duration).await?;
                 }
@@ -243,6 +303,10 @@ async fn drive_outgoing(
                 Some(DataChannelEvent::OnOpen) => open = true,
                 Some(DataChannelEvent::OnMessage(message)) => {
                     let text = String::from_utf8_lossy(&message.data).into_owned();
+                    if text == "K" {
+                        need_key.store(true, Ordering::Relaxed);
+                        continue;
+                    }
                     let mut parts = text.split(',');
                     let counter = parts.next().and_then(|c| c.parse::<u32>().ok());
                     let held = parts.next().and_then(|h| h.parse::<f32>().ok());

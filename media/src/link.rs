@@ -133,6 +133,9 @@ struct RxContext {
     backlog: Arc<AtomicUsize>,
     /// Confirmations of shown pictures, to send to the broadcaster.
     acks: Mutex<Option<UnboundedReceiver<String>>>,
+    /// Where to ask the broadcaster for a new keyframe (the same path as the
+    /// confirmations).
+    requests: UnboundedSender<String>,
     stats: Arc<Mutex<Stats>>,
     peer: PeerId,
 }
@@ -195,7 +198,9 @@ impl PeerConnectionEventHandler for Handler {
         let Some(rx) = &self.rx else { return };
         let units = rx.units.clone();
         let backlog = Arc::clone(&rx.backlog);
+        let requests = rx.requests.clone();
         rx.runtime.spawn(Box::pin(async move {
+            let mut watch = GapWatch::default();
             // A 1080p keyframe is hundreds of packets: the builder must be
             // willing to wait for all of them before it gives up on a unit.
             let mut builder = SampleBuilder::new(1024, H264Packet::default(), 90_000);
@@ -203,6 +208,11 @@ impl PeerConnectionEventHandler for Handler {
                 let TrackRemoteEvent::OnRtpPacket(packet) = event else {
                     continue;
                 };
+                // A missing packet leaves a hole the decoder cannot see: ask for
+                // a picture to start over from (retransmission may still fill it).
+                if watch.lost(packet.header.sequence_number) {
+                    let _ = requests.send("K".to_owned());
+                }
                 builder.push(Instant::now(), packet);
                 while let Some(sample) = builder.pop(Instant::now()) {
                     backlog.fetch_add(1, Ordering::Relaxed);
@@ -212,6 +222,36 @@ impl PeerConnectionEventHandler for Handler {
                 }
             }
         }));
+    }
+}
+
+/// Notices missing RTP packets, and asks for a keyframe at most once a second.
+#[derive(Default)]
+pub(crate) struct GapWatch {
+    last: Option<u16>,
+    asked: Option<Instant>,
+}
+
+impl GapWatch {
+    /// Whether a keyframe should be requested after packet `seq` arrived.
+    pub(crate) fn lost(&mut self, seq: u16) -> bool {
+        let gap = self.last.is_some_and(|last| {
+            let step = seq.wrapping_sub(last);
+            // 1 is in order; a small backward step is a late or repeated packet.
+            step > 1 && step < 0x8000
+        });
+        if self.last.is_none_or(|last| seq.wrapping_sub(last) < 0x8000) {
+            self.last = Some(seq);
+        }
+        if gap
+            && self
+                .asked
+                .is_none_or(|t| t.elapsed() >= Duration::from_secs(1))
+        {
+            self.asked = Some(Instant::now());
+            return true;
+        }
+        false
     }
 }
 
@@ -486,6 +526,7 @@ impl RecvLink {
             units: feed.units,
             backlog: feed.backlog,
             acks: Mutex::new(Some(feed.acks)),
+            requests: feed.requests,
             stats,
             peer,
         };
@@ -528,6 +569,7 @@ pub(crate) struct DecoderFeed {
     pub units: StdSender<Unit>,
     pub backlog: Arc<AtomicUsize>,
     pub acks: UnboundedReceiver<String>,
+    pub requests: UnboundedSender<String>,
 }
 
 /// The decoder thread's side of a `DecoderFeed`.
@@ -546,6 +588,7 @@ pub(crate) fn decoder_channels() -> (DecoderFeed, DecoderInput) {
             units: units_tx,
             backlog: Arc::clone(&backlog),
             acks: acks_rx,
+            requests: acks_tx.clone(),
         },
         DecoderInput {
             units: units_rx,
@@ -570,13 +613,23 @@ pub(crate) fn spawn_decoder(
             return;
         };
         let mut seq = 0u64;
+        let mut asked: Option<Instant> = None;
         let (mut window, mut frames, mut bytes) = (Instant::now(), 0u32, 0usize);
         while let Ok((data, ready_at)) = input.units.recv() {
             input.backlog.fetch_sub(1, Ordering::Relaxed);
             let started = Instant::now();
             // The first units may fail until a keyframe arrives.
-            let Ok(Some(yuv)) = decoder.decode(&data) else {
-                continue;
+            let yuv = match decoder.decode(&data) {
+                Ok(Some(yuv)) => yuv,
+                Ok(None) => continue,
+                Err(_) => {
+                    // Corrupt or missing references: ask for a fresh start.
+                    if asked.is_none_or(|t: Instant| t.elapsed() >= Duration::from_secs(1)) {
+                        asked = Some(Instant::now());
+                        let _ = input.acks.send("K".to_owned());
+                    }
+                    continue;
+                }
             };
             let decode_ms = started.elapsed().as_secs_f32() * 1000.0;
             let (width, height) = yuv.dimensions();
@@ -618,4 +671,29 @@ pub(crate) fn spawn_decoder(
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_gap_asks_for_a_keyframe_once_a_second() {
+        let mut watch = GapWatch::default();
+        assert!(!watch.lost(10));
+        assert!(!watch.lost(11));
+        assert!(watch.lost(13), "packet 12 is missing");
+        assert!(!watch.lost(15), "asked a moment ago");
+        assert!(!watch.lost(16));
+    }
+
+    #[test]
+    fn late_and_wrapped_packets_are_not_gaps() {
+        let mut watch = GapWatch::default();
+        assert!(!watch.lost(65534));
+        assert!(!watch.lost(65535));
+        assert!(!watch.lost(0), "the counter wraps around");
+        assert!(!watch.lost(1));
+        assert!(!watch.lost(0), "a repeated packet");
+    }
 }

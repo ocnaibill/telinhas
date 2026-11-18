@@ -48,7 +48,7 @@ Dividido em etapas (DEC-61 escolheu o egui; o spike M4a passou):
 - **M4b** — o app com tema, apelido, início, sala, modal de transmissão e os estados que faltavam, com dados de teste: concluído e aprovado pelo mantenedor.
 - **M4c** — ligar o app à sinalização: criar e entrar, aprovação, administrador, participantes, reconexão. **Concluído** (falta só a prova no Windows contra o servidor de teste): o app usa o `telinhas-net`, com servidor por `--server`, `TELINHAS_SERVER` ou o campo na tela inicial; sem servidor, continua em modo demonstração.
 - **M4d** — vídeo real entre os apps: crate `telinhas-media` (um encode por transmissão, uma conexão WebRTC por espectador, decodificação para os cartões). Concluído nos testes em loopback e entre dois apps; falta a prova pela internet no Windows. Pendências: ack de quadros para limitar a fila (como no spike), PLI, trocar a fonte sem derrubar (DEC-11) e escalar para a resolução escolhida no modal.
-- **M4e** — transmitir a partir do modal, com opções de resolução e FPS vindas do hardware e da fonte (RF-05, RF-22).
+- **M4e** — transmitir a partir do modal: a resolução e o FPS escolhidos valem como teto (o vídeo é reduzido, nunca ampliado), trocar a fonte não renegocia a conexão (DEC-11, DEC-44), o espectador pede um keyframe quando perde pacotes (PLI) e o transmissor descarta quadros quando a rede não acompanha (limite de fila). **Concluído** nos testes; falta a prova no Windows e no Mac. A redução usa a CPU (média por blocos); mover para a GPU fica para depois se pesar no RNF-10.
 
 - Interface principal única (DEC-20), escolhida a biblioteca de UI com as telas desenhadas (DEC-40).
 - Início, apelido no primeiro uso, sala com Grid dinâmico e Foco, modal de configuração de transmissão.

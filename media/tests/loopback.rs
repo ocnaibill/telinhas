@@ -12,11 +12,14 @@ const BETO: PeerId = PeerId::from_u128(2);
 fn relay(from: &Media, from_id: PeerId, to: &Media, log: &mut Vec<String>) {
     while let Some(event) = from.try_event() {
         match event {
-            Event::Signal { kind, payload, .. } => to.send(Command::Signal {
-                from: from_id,
-                kind,
-                payload,
-            }),
+            Event::Signal { kind, payload, .. } => {
+                log.push(format!("signal {kind:?}"));
+                to.send(Command::Signal {
+                    from: from_id,
+                    kind,
+                    payload,
+                });
+            }
             other => log.push(format!("{other:?}")),
         }
     }
@@ -123,4 +126,85 @@ fn a_viewer_who_joins_later_gets_the_broadcast() {
     ana.send(Command::StopBroadcast);
     std::thread::sleep(Duration::from_millis(300));
     assert!(beto.latest(ANA).is_none());
+}
+
+fn wait_for(
+    ana: &Media,
+    beto: &Media,
+    log: &mut Vec<String>,
+    what: &str,
+    done: impl Fn(&Media) -> bool,
+) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        relay(ana, ANA, beto, log);
+        relay(beto, BETO, ana, log);
+        if done(beto) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {what}; events: {log:?}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn the_broadcast_is_shrunk_to_what_the_broadcaster_chose_and_never_enlarged() {
+    let (ana, beto) = pair();
+    let mut spec = BroadcastSpec::new(
+        BroadcastSource::Synthetic {
+            width: 1280,
+            height: 720,
+        },
+        15,
+        2000,
+    );
+    spec.max_height = Some(360);
+    ana.send(Command::StartBroadcast {
+        spec,
+        viewers: vec![BETO],
+    });
+    let mut log = Vec::new();
+    wait_for(&ana, &beto, &mut log, "a shrunk picture", |b| {
+        b.latest(ANA).is_some_and(|p| p.seq >= 3 && p.height == 360)
+    });
+    assert_eq!(beto.latest(ANA).unwrap().width, 640);
+
+    // A limit above the source changes nothing: no enlarging.
+    spec.max_height = Some(1080);
+    ana.send(Command::StartBroadcast {
+        spec,
+        viewers: vec![BETO],
+    });
+    wait_for(&ana, &beto, &mut log, "the original size", |b| {
+        b.latest(ANA).is_some_and(|p| p.height == 720)
+    });
+}
+
+#[test]
+fn changing_the_source_keeps_the_connection() {
+    let (ana, beto) = pair();
+    let small =
+        |width, height| BroadcastSpec::new(BroadcastSource::Synthetic { width, height }, 15, 2000);
+    ana.send(Command::StartBroadcast {
+        spec: small(640, 360),
+        viewers: vec![BETO],
+    });
+    let mut log = Vec::new();
+    wait_for(&ana, &beto, &mut log, "the first source", |b| {
+        b.latest(ANA).is_some_and(|p| p.seq >= 3 && p.width == 640)
+    });
+    ana.send(Command::StartBroadcast {
+        spec: small(320, 180),
+        viewers: vec![BETO],
+    });
+    wait_for(&ana, &beto, &mut log, "the second source", |b| {
+        b.latest(ANA).is_some_and(|p| p.width == 320)
+    });
+    // One offer for the whole time: the connection was not renegotiated.
+    let offers = log.iter().filter(|e| *e == "signal Offer").count();
+    assert_eq!(offers, 1, "events: {log:?}");
+    ana.send(Command::StopBroadcast);
 }

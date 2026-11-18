@@ -155,11 +155,15 @@ impl TelinhasApp {
                 .filter_map(|p| p.peer_id)
                 .collect();
             media.send(telinhas_media::Command::StartBroadcast {
-                spec: BroadcastSpec::new(
-                    source,
-                    draft.fps,
-                    crate::model::target_kbps(width, height, draft.fps),
-                ),
+                spec: BroadcastSpec {
+                    // What the person chose is the most it will ever send.
+                    max_height: Some(height),
+                    ..BroadcastSpec::new(
+                        source,
+                        draft.fps,
+                        crate::model::target_kbps(width, height, draft.fps),
+                    )
+                },
                 viewers,
             });
         }
