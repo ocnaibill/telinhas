@@ -13,6 +13,13 @@ const SOURCE_RATE: u32 = 48_000;
 /// A source starts playing once this much is waiting, so a late packet does not
 /// make it stutter; and starts over when it runs dry.
 const PREFILL_MS: f32 = 60.0;
+/// How much sound should be waiting, in steady state.
+const TARGET_MS: f32 = 70.0;
+/// The sender's clock and the sound card's never run at exactly the same
+/// speed. Instead of letting the buffer grow until it must be cut (a click, and
+/// a delay that keeps getting longer), the playback speeds up or slows down by
+/// up to this fraction, which is too little to hear.
+const MAX_SPEED_ADJUST: f32 = 0.005;
 
 /// One broadcaster's sound as the mixer plays it.
 struct Source {
@@ -64,7 +71,7 @@ impl Mixer {
         if frames == 0 {
             return;
         }
-        let step = f64::from(SOURCE_RATE) / f64::from(rate.max(1));
+        let base_step = f64::from(SOURCE_RATE) / f64::from(rate.max(1));
         for source in self.sources.values_mut() {
             if source.volume <= 0.0 {
                 // Keep the buffer from filling up and then jumping ahead.
@@ -78,6 +85,13 @@ impl Mixer {
                 }
                 source.primed = true;
             }
+            // Follow the sender's clock: consume a little faster when too much
+            // waits, a little slower when too little does.
+            let waiting_ms = source.buffer.buffered_ms()
+                + (source.pending.len() / 2) as f32 * 1000.0 / SOURCE_RATE as f32;
+            let adjust = ((waiting_ms - TARGET_MS) / TARGET_MS * 0.01)
+                .clamp(-MAX_SPEED_ADJUST, MAX_SPEED_ADJUST);
+            let step = base_step * (1.0 + f64::from(adjust));
             // Input frames needed to produce `frames` output frames.
             let needed = (source.position + frames as f64 * step).ceil() as usize + 2;
             let have = source.pending.len() / 2;
@@ -274,6 +288,40 @@ mod tests {
             "used {used} ms of a 200 ms buffer"
         );
         assert!(out[..2000].iter().all(|s| (*s - 0.3).abs() < 1e-3));
+    }
+
+    #[test]
+    fn a_sender_running_slightly_fast_does_not_make_the_delay_grow() {
+        let mut mixer = Mixer::default();
+        let buffer = buffer_with(0.3, 80);
+        mixer.set_sources(vec![(PEER, Arc::clone(&buffer), 1.0)]);
+        let mut out = vec![0f32; 960 * 2];
+        // Every 20 ms tick the sender delivers 0.4% more than the card plays:
+        // five minutes of that would pile up far more than the 200 ms cap.
+        let mut peak = 0f32;
+        for _ in 0..15_000 {
+            buffer.push_for_test(&vec![0.3; 964 * 2]);
+            mixer.render(&mut out, 48_000);
+            peak = peak.max(buffer.buffered_ms());
+        }
+        let waiting = buffer.buffered_ms();
+        assert!(waiting < 120.0, "{waiting} ms waiting at the end");
+        assert!(peak < 200.0, "the buffer hit its cap ({peak} ms)");
+    }
+
+    #[test]
+    fn a_sender_running_slightly_slow_does_not_run_dry() {
+        let mut mixer = Mixer::default();
+        let buffer = buffer_with(0.3, 90);
+        mixer.set_sources(vec![(PEER, Arc::clone(&buffer), 1.0)]);
+        let mut out = vec![0f32; 960 * 2];
+        let mut silent_ticks = 0;
+        for _ in 0..15_000 {
+            buffer.push_for_test(&vec![0.3; 956 * 2]);
+            mixer.render(&mut out, 48_000);
+            silent_ticks += usize::from(out.iter().all(|s| *s == 0.0));
+        }
+        assert_eq!(silent_ticks, 0, "it ran dry and went silent");
     }
 
     #[test]
