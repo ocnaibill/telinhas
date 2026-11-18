@@ -70,6 +70,15 @@ pub struct StreamInfo {
     pub has_webcam: bool,
 }
 
+/// A stream that will go live once the capture is open (see `pending_stream`).
+pub struct PendingStream {
+    pub info: StreamInfo,
+    pub title: String,
+    pub webcam: bool,
+    /// The setup was changed while live: the stream is replaced, not added.
+    pub switching: bool,
+}
+
 pub struct Room {
     pub code: String,
     pub require_approval: bool,
@@ -345,6 +354,9 @@ pub struct Sources {
     /// not done), so the app must not offer to broadcast: the test data would
     /// send a test picture and a tone to a real room.
     pub capture_unavailable: bool,
+    /// The desktop picks the screen or window in its own dialog (Linux, DEC-29),
+    /// so there are no lists to show: the choice is made when the broadcast starts.
+    pub portal: bool,
 }
 
 impl Sources {
@@ -361,8 +373,18 @@ impl Sources {
                     audio_apps,
                     is_demo: false,
                     capture_unavailable: false,
+                    portal: false,
                 }
             }
+            // No lists to ask for: on Linux the portal picks the source.
+            _ if capture::capture_support().is_ok() && cfg!(target_os = "linux") => Self {
+                monitors: Vec::new(),
+                windows: Vec::new(),
+                audio_apps: Vec::new(),
+                is_demo: false,
+                capture_unavailable: false,
+                portal: true,
+            },
             _ => Self {
                 capture_unavailable: true,
                 ..Self::demo()
@@ -416,6 +438,7 @@ impl Sources {
             ],
             is_demo: true,
             capture_unavailable: false,
+            portal: false,
         }
     }
 }
@@ -464,6 +487,11 @@ impl BroadcastDraft {
 
     /// The picture size of the chosen source, before scaling.
     pub fn source_size(&self, sources: &Sources) -> (u32, u32) {
+        if sources.portal {
+            // Not known before the person chooses: offer up to 4K, and the
+            // broadcast never enlarges whatever turns out to be chosen.
+            return (3840, 2160);
+        }
         match self.tab {
             SourceTab::Screens => sources
                 .monitors
@@ -478,6 +506,9 @@ impl BroadcastDraft {
 
     /// The source's refresh rate, for a screen; windows follow their screen.
     pub fn source_refresh(&self, sources: &Sources) -> u32 {
+        if sources.portal {
+            return 60;
+        }
         sources
             .monitors
             .iter()

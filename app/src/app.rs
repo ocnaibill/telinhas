@@ -96,6 +96,9 @@ pub struct TelinhasApp {
     pub(crate) net: Option<Handle>,
     pub(crate) media: Option<telinhas_media::Media>,
     /// The sound output, opened when the first sound arrives.
+    /// A broadcast that waits for the desktop's dialog: the person has not
+    /// chosen yet, so nothing is shown or announced until the capture is open.
+    pub(crate) pending_stream: Option<crate::model::PendingStream>,
     pub(crate) playback: Option<crate::playback::Playback>,
     pub(crate) playback_failed: bool,
     pub(crate) link: Link,
@@ -237,6 +240,7 @@ impl TelinhasApp {
             server_draft: String::new(),
             net: None,
             media: None,
+            pending_stream: None,
             playback: None,
             playback_failed: false,
             link: Link::Idle,
@@ -783,5 +787,101 @@ mod tests {
         app.home.mode = EntryMode::Broadcasting;
         app.enter_room("ABCD-2345", false);
         assert!(matches!(app.modal, Modal::None));
+    }
+
+    #[test]
+    fn a_portal_broadcast_goes_live_only_when_the_capture_is_open() {
+        use crate::model::{PendingStream, Quality, StreamInfo};
+        let sources = Sources {
+            portal: true,
+            ..Sources::demo()
+        };
+        let mut app = TelinhasApp::build("Ana".to_owned(), sources);
+        app.enter_room("ABCD-2345", true);
+        let me = app.nickname.clone();
+        let info = StreamInfo {
+            owner_id: None,
+            stream_id: "screen".to_owned(),
+            owner: me,
+            title: "Tela compartilhada".to_owned(),
+            width: 1920,
+            height: 1080,
+            fps: 60,
+            hardware: false,
+            volume: 1.0,
+            visible: true,
+            quality: Quality::Original,
+            has_webcam: false,
+        };
+        app.pending_stream = Some(PendingStream {
+            info,
+            title: "Tela compartilhada".to_owned(),
+            webcam: false,
+            switching: false,
+        });
+        let before = app.room.as_ref().unwrap().streams.len();
+        assert!(
+            !app.room.as_ref().unwrap().broadcasting,
+            "nothing is live yet"
+        );
+
+        // The person chose a 1280x720 window: the stream takes its real size.
+        app.on_media_event(telinhas_media::Event::Encoder {
+            name: "x".to_owned(),
+            hardware: true,
+            fallback_reason: None,
+            width: 1280,
+            height: 720,
+        });
+        let room = app.room.as_ref().unwrap();
+        assert_eq!(room.streams.len(), before + 1);
+        assert_eq!(
+            (room.streams[before].width, room.streams[before].height),
+            (1280, 720)
+        );
+        assert!(room.broadcasting && app.pending_stream.is_none());
+    }
+
+    #[test]
+    fn cancelling_the_desktop_dialog_leaves_nothing_behind() {
+        use crate::model::{PendingStream, Quality, StreamInfo};
+        let sources = Sources {
+            portal: true,
+            ..Sources::demo()
+        };
+        let mut app = TelinhasApp::build("Ana".to_owned(), sources);
+        app.enter_room("ABCD-2345", true);
+        let info = StreamInfo {
+            owner_id: None,
+            stream_id: "screen".to_owned(),
+            owner: "Ana".to_owned(),
+            title: String::new(),
+            width: 1920,
+            height: 1080,
+            fps: 60,
+            hardware: false,
+            volume: 1.0,
+            visible: true,
+            quality: Quality::Original,
+            has_webcam: false,
+        };
+        app.pending_stream = Some(PendingStream {
+            info,
+            title: String::new(),
+            webcam: false,
+            switching: false,
+        });
+        let before = app.room.as_ref().unwrap().streams.len();
+        app.on_media_event(telinhas_media::Event::BroadcastFailed(
+            "a escolha da tela foi cancelada".to_owned(),
+        ));
+        assert!(app.pending_stream.is_none());
+        let room = app.room.as_ref().unwrap();
+        assert_eq!(room.streams.len(), before);
+        assert!(!room.broadcasting);
+        assert!(app.toast.is_some());
+        // The setup draws for a portal source too.
+        app.modal = Modal::Broadcast(Box::new(BroadcastDraft::new()));
+        frames(&mut app, 3);
     }
 }

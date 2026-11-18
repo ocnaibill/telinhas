@@ -18,6 +18,40 @@ impl TelinhasApp {
         }
     }
 
+    /// The capture is open: the stream the person asked for goes live, with the
+    /// size the screen or window really has (never above what was chosen).
+    fn finish_pending_stream(&mut self, width: u32, height: u32, hardware: bool) {
+        let Some(mut pending) = self.pending_stream.take() else {
+            return;
+        };
+        pending.info.width = width;
+        pending.info.height = height;
+        pending.info.hardware = hardware;
+        let me = pending.info.owner.clone();
+        let (fps, has_webcam) = (pending.info.fps, pending.webcam);
+        let meta =
+            crate::model::stream_meta(&pending.title, width, height, fps, hardware, has_webcam);
+        if let Some(room) = self.room.as_mut() {
+            if let Some(index) = room.streams.iter().position(|s| s.owner == me) {
+                room.streams[index] = pending.info;
+            } else {
+                room.streams.push(pending.info);
+            }
+            room.broadcasting = true;
+        }
+        self.send(Command::AnnounceStream {
+            stream_id: "screen".to_owned(),
+            kind: telinhas_protocol::StreamKind::Screen,
+            live: true,
+            meta,
+        });
+        self.show_toast(if pending.switching {
+            "Fonte trocada sem derrubar a transmissão"
+        } else {
+            "Transmissão iniciada"
+        });
+    }
+
     /// Gives the sound output the broadcasters' sound, with each one's volume.
     /// The output opens when the first sound arrives, not before.
     pub(crate) fn update_playback(&mut self) {
@@ -59,14 +93,23 @@ impl TelinhasApp {
         }
     }
 
-    fn on_media_event(&mut self, event: telinhas_media::Event) {
+    pub(crate) fn on_media_event(&mut self, event: telinhas_media::Event) {
         use telinhas_media::Event as Media;
         match event {
             Media::Signal { to, kind, payload } => {
                 self.send(Command::Signal { to, kind, payload });
             }
-            Media::Encoder { hardware, .. } => self.sim.software_encoder = !hardware,
+            Media::Encoder {
+                hardware,
+                width,
+                height,
+                ..
+            } => {
+                self.sim.software_encoder = !hardware;
+                self.finish_pending_stream(width, height, hardware);
+            }
             Media::BroadcastFailed(reason) => {
+                self.pending_stream = None;
                 if let Some(room) = self.room.as_mut() {
                     room.broadcasting = false;
                     let me = room.me_id();

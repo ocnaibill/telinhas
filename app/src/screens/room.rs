@@ -87,6 +87,7 @@ impl TelinhasApp {
             self.open_broadcast_modal();
         }
         if actions.stop_broadcast {
+            self.pending_stream = None;
             room.broadcasting = false;
             if let Some(media) = &self.media {
                 media.send(telinhas_media::Command::StopBroadcast);

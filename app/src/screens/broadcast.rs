@@ -103,35 +103,48 @@ impl TelinhasApp {
             has_webcam: draft.webcam,
         };
         let switching = room.broadcasting;
-        if let Some(index) = room.streams.iter().position(|s| s.owner == me) {
-            // Changing the source while live does not drop the stream (DEC-11).
-            room.streams[index] = info;
-        } else {
-            room.streams.push(info);
-            if self.media.is_none() {
-                self.mock
-                    .push(crate::mockvideo::MockSource::start(1280, 720, 30, 4));
-            }
-        }
-        room.broadcasting = true;
-        if let Some(net) = &self.net {
-            net.send(telinhas_net::Command::AnnounceStream {
-                stream_id: "screen".to_owned(),
-                kind: telinhas_protocol::StreamKind::Screen,
-                live: true,
-                meta: crate::model::stream_meta(
-                    &title_for_meta,
-                    width,
-                    height,
-                    draft.fps,
-                    !software,
-                    draft.webcam,
-                ),
+        let portal = self.sources.portal;
+        if portal {
+            // The person is about to choose in the desktop's dialog. What is
+            // shown and announced waits for the capture to be open.
+            self.pending_stream = Some(crate::model::PendingStream {
+                info,
+                title: title_for_meta.clone(),
+                webcam: draft.webcam,
+                switching,
             });
+        } else {
+            if let Some(index) = room.streams.iter().position(|s| s.owner == me) {
+                // Changing the source while live does not drop the stream (DEC-11).
+                room.streams[index] = info;
+            } else {
+                room.streams.push(info);
+                if self.media.is_none() {
+                    self.mock
+                        .push(crate::mockvideo::MockSource::start(1280, 720, 30, 4));
+                }
+            }
+            room.broadcasting = true;
+            if let Some(net) = &self.net {
+                net.send(telinhas_net::Command::AnnounceStream {
+                    stream_id: "screen".to_owned(),
+                    kind: telinhas_protocol::StreamKind::Screen,
+                    live: true,
+                    meta: crate::model::stream_meta(
+                        &title_for_meta,
+                        width,
+                        height,
+                        draft.fps,
+                        !software,
+                        draft.webcam,
+                    ),
+                });
+            }
         }
         if let Some(media) = &self.media {
             use telinhas_media::{BroadcastSource, BroadcastSpec};
             let source = match (self.sources.is_demo, draft.tab) {
+                _ if self.sources.portal => BroadcastSource::Portal,
                 (true, _) => BroadcastSource::Synthetic {
                     width: 1280,
                     height: 720,
@@ -151,7 +164,8 @@ impl TelinhasApp {
             // Sound: a window brings its own program's, a screen brings the
             // system's minus what the person left out. Without capture support
             // (the demonstration sources) a tone stands in, to hear the path.
-            let audio = if !draft.system_audio {
+            let audio = if !draft.system_audio || self.sources.portal {
+                // (On Linux the sound of the broadcast is the next step.)
                 None
             } else if self.sources.is_demo {
                 Some(telinhas_media::AudioInput::Synthetic)
@@ -192,11 +206,15 @@ impl TelinhasApp {
         if draft.webcam && self.mock_webcam.is_none() && self.media.is_none() {
             self.mock_webcam = Some(crate::mockvideo::MockSource::start(640, 360, 24, 3));
         }
-        self.show_toast(if switching {
-            "Fonte trocada sem derrubar a transmissão"
+        if portal {
+            self.show_toast("Escolha o que transmitir na janela do sistema");
         } else {
-            "Transmissão iniciada"
-        });
+            self.show_toast(if switching {
+                "Fonte trocada sem derrubar a transmissão"
+            } else {
+                "Transmissão iniciada"
+            });
+        }
     }
 
     fn broadcast_form(
@@ -245,82 +263,89 @@ impl TelinhasApp {
                 ui.set_width(MODAL_WIDTH - 24.0);
                 // ---- source
                 theme::section_title(ui, "Origem da captura");
-                let mut tab = draft.tab;
-                let tabs = [
-                    (
-                        SourceTab::Screens,
-                        format!("Telas inteiras ({})", sources.monitors.len()),
-                    ),
-                    (
-                        SourceTab::Windows,
-                        format!("Janelas ({})", sources.windows.len()),
-                    ),
-                ];
-                let labels: Vec<(SourceTab, &str)> =
-                    tabs.iter().map(|(t, l)| (*t, l.as_str())).collect();
-                if theme::segmented(ui, &mut tab, &labels) {
-                    draft.tab = tab;
-                    draft.clamp(&sources);
-                }
-                match draft.tab {
-                    SourceTab::Screens => {
-                        ui.horizontal_wrapped(|ui| {
-                            for (index, monitor) in sources.monitors.iter().enumerate() {
-                                let selected = draft.monitor == index;
-                                let title = format!(
-                                    "Tela {}{}",
-                                    index + 1,
-                                    if monitor.primary { " (principal)" } else { "" }
-                                );
-                                let detail = format!(
-                                    "{} × {} · {} Hz",
-                                    monitor.width, monitor.height, monitor.refresh_hz
-                                );
-                                if source_card(
-                                    ui,
-                                    theme::icons::MONITOR,
-                                    &title,
-                                    &detail,
-                                    selected,
-                                    340.0,
-                                    false,
-                                ) {
-                                    draft.monitor = index;
-                                    draft.clamp(&sources);
-                                }
-                            }
-                        });
+                if sources.portal {
+                    ui.label(
+                        RichText::new("Ao iniciar, o próprio sistema abre uma caixa para você escolher a tela ou a janela. O Telinhas não enxerga as suas janelas antes disso.")
+                            .color(theme::TEXT_DIM),
+                    );
+                } else {
+                    let mut tab = draft.tab;
+                    let tabs = [
+                        (
+                            SourceTab::Screens,
+                            format!("Telas inteiras ({})", sources.monitors.len()),
+                        ),
+                        (
+                            SourceTab::Windows,
+                            format!("Janelas ({})", sources.windows.len()),
+                        ),
+                    ];
+                    let labels: Vec<(SourceTab, &str)> =
+                        tabs.iter().map(|(t, l)| (*t, l.as_str())).collect();
+                    if theme::segmented(ui, &mut tab, &labels) {
+                        draft.tab = tab;
+                        draft.clamp(&sources);
                     }
-                    SourceTab::Windows => {
-                        ui.horizontal_wrapped(|ui| {
-                            for (index, window) in sources.windows.iter().enumerate() {
-                                let selected = draft.window == index;
-                                let detail = format!(
-                                    "{} · {} × {}{}",
-                                    window.process,
-                                    window.width,
-                                    window.height,
-                                    if window.minimized {
-                                        " · minimizada"
-                                    } else {
-                                        ""
+                    match draft.tab {
+                        SourceTab::Screens => {
+                            ui.horizontal_wrapped(|ui| {
+                                for (index, monitor) in sources.monitors.iter().enumerate() {
+                                    let selected = draft.monitor == index;
+                                    let title = format!(
+                                        "Tela {}{}",
+                                        index + 1,
+                                        if monitor.primary { " (principal)" } else { "" }
+                                    );
+                                    let detail = format!(
+                                        "{} × {} · {} Hz",
+                                        monitor.width, monitor.height, monitor.refresh_hz
+                                    );
+                                    if source_card(
+                                        ui,
+                                        theme::icons::MONITOR,
+                                        &title,
+                                        &detail,
+                                        selected,
+                                        340.0,
+                                        false,
+                                    ) {
+                                        draft.monitor = index;
+                                        draft.clamp(&sources);
                                     }
-                                );
-                                if source_card(
-                                    ui,
-                                    theme::icons::APP_WINDOW,
-                                    &window.title,
-                                    &detail,
-                                    selected,
-                                    340.0,
-                                    window.minimized,
-                                ) && !window.minimized
-                                {
-                                    draft.window = index;
-                                    draft.clamp(&sources);
                                 }
-                            }
-                        });
+                            });
+                        }
+                        SourceTab::Windows => {
+                            ui.horizontal_wrapped(|ui| {
+                                for (index, window) in sources.windows.iter().enumerate() {
+                                    let selected = draft.window == index;
+                                    let detail = format!(
+                                        "{} · {} × {}{}",
+                                        window.process,
+                                        window.width,
+                                        window.height,
+                                        if window.minimized {
+                                            " · minimizada"
+                                        } else {
+                                            ""
+                                        }
+                                    );
+                                    if source_card(
+                                        ui,
+                                        theme::icons::APP_WINDOW,
+                                        &window.title,
+                                        &detail,
+                                        selected,
+                                        340.0,
+                                        window.minimized,
+                                    ) && !window.minimized
+                                    {
+                                        draft.window = index;
+                                        draft.clamp(&sources);
+                                    }
+                                }
+                            });
+                        }
                     }
                 }
 
@@ -380,20 +405,28 @@ impl TelinhasApp {
                     },
                     &mut draft.mouse,
                 );
-                toggle_row(
-                    ui,
-                    theme::icons::SPEAKER_HIGH,
-                    "Áudio do sistema",
-                    match draft.tab {
-                        SourceTab::Screens => {
-                            "Todo o áudio da tela, menos o dos aplicativos excluídos"
-                        }
-                        SourceTab::Windows => "Só o áudio da janela escolhida",
-                    },
-                    &mut draft.system_audio,
-                );
-                if draft.tab == SourceTab::Screens && draft.system_audio {
-                    excluded_apps(ui, draft, &sources.audio_apps);
+                if sources.portal {
+                    ui.label(
+                        RichText::new("O som da transmissão no Linux é o próximo passo e ainda não vai junto.")
+                            .small()
+                            .color(theme::AMBER),
+                    );
+                } else {
+                    toggle_row(
+                        ui,
+                        theme::icons::SPEAKER_HIGH,
+                        "Áudio do sistema",
+                        match draft.tab {
+                            SourceTab::Screens => {
+                                "Todo o áudio da tela, menos o dos aplicativos excluídos"
+                            }
+                            SourceTab::Windows => "Só o áudio da janela escolhida",
+                        },
+                        &mut draft.system_audio,
+                    );
+                    if draft.tab == SourceTab::Screens && draft.system_audio {
+                        excluded_apps(ui, draft, &sources.audio_apps);
+                    }
                 }
                 if crate::app::MIC_AND_CAMERA {
                     toggle_row(

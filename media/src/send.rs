@@ -30,6 +30,9 @@ pub enum BroadcastSource {
     Monitor(usize),
     /// A window, by the handle of `telinhas_capture::list_windows`.
     Window(isize),
+    /// What the person picks in the desktop's own dialog (Linux). Starting
+    /// waits for that choice.
+    Portal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,6 +144,7 @@ impl Frames {
             }
             BroadcastSource::Monitor(index) => capture::Source::Monitor(index),
             BroadcastSource::Window(handle) => capture::Source::Window(handle),
+            BroadcastSource::Portal => capture::Source::Portal,
         };
         capture::init_dpi_awareness();
         let latest: Arc<Mutex<Latest>> = Arc::default();
