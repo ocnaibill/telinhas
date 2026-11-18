@@ -40,6 +40,19 @@ pub struct Sending {
     pub encode_ms: f32,
 }
 
+/// The sound a viewer receives from one broadcaster.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AudioReceiving {
+    pub packets: u64,
+    /// Packets that never arrived, concealed by the decoder.
+    pub lost: u64,
+    pub decoded: u64,
+    /// Loudest sample so far, 0 to 1.
+    pub peak: f32,
+    /// Sound waiting to be played, in milliseconds.
+    pub buffered_ms: f32,
+}
+
 /// A viewer's numbers about one broadcaster.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Receiving {
@@ -53,6 +66,7 @@ pub struct Receiving {
     pub backlog: usize,
     /// The path as the broadcaster measured it, sent back to us.
     pub path: Path,
+    pub audio: AudioReceiving,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

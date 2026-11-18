@@ -11,6 +11,7 @@
 //! the work happens on its own runtime.
 
 mod actor;
+mod audio;
 mod link;
 mod picture;
 mod scale;
@@ -22,10 +23,11 @@ use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
+pub use audio::{AudioBuffer, AudioInput};
 pub use link::LinkConfig;
 pub use picture::Picture;
 pub use send::{BroadcastSource, BroadcastSpec};
-pub use stats::{Path, Receiving, Sending, Stats};
+pub use stats::{AudioReceiving, Path, Receiving, Sending, Stats};
 pub use telinhas_protocol::{PeerId, SignalKind, Value};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
@@ -73,9 +75,13 @@ pub enum Event {
     },
     /// The broadcast could not start or stopped on its own.
     BroadcastFailed(String),
+    /// The sound could not be captured or stopped on its own; the video goes on.
+    AudioFailed(String),
     /// A peer's pictures are coming (the first one arrived).
     Receiving(PeerId),
 }
+
+pub(crate) type AudioBuffers = Arc<Mutex<HashMap<PeerId, Arc<AudioBuffer>>>>;
 
 type Latest = Arc<Mutex<HashMap<PeerId, Arc<Picture>>>>;
 
@@ -85,6 +91,7 @@ pub struct Media {
     events: Mutex<Receiver<Event>>,
     latest: Latest,
     stats: Arc<Mutex<Stats>>,
+    audio: AudioBuffers,
 }
 
 impl Media {
@@ -95,12 +102,14 @@ impl Media {
         let (events_tx, events) = channel();
         let latest: Latest = Arc::default();
         let stats: Arc<Mutex<Stats>> = Arc::default();
+        let audio: AudioBuffers = Arc::default();
         let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(wake);
         let shared = actor::Shared {
             link,
             events: events_tx,
             latest: Arc::clone(&latest),
             stats: Arc::clone(&stats),
+            audio: Arc::clone(&audio),
             wake,
         };
         std::thread::Builder::new()
@@ -121,6 +130,7 @@ impl Media {
             events: Mutex::new(events),
             latest,
             stats,
+            audio,
         }
     }
 
@@ -135,6 +145,11 @@ impl Media {
     /// A copy of the measurements so far.
     pub fn stats(&self) -> Stats {
         self.stats.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+
+    /// The decoded sound of what `peer` broadcasts, for the playback to pull from.
+    pub fn audio(&self, peer: PeerId) -> Option<Arc<AudioBuffer>> {
+        self.audio.lock().ok()?.get(&peer).cloned()
     }
 
     /// The newest decoded picture of what `peer` is broadcasting.

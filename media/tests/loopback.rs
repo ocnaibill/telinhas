@@ -163,7 +163,7 @@ fn the_broadcast_is_shrunk_to_what_the_broadcaster_chose_and_never_enlarged() {
     );
     spec.max_height = Some(360);
     ana.send(Command::StartBroadcast {
-        spec,
+        spec: spec.clone(),
         viewers: vec![BETO],
     });
     let mut log = Vec::new();
@@ -207,4 +207,52 @@ fn changing_the_source_keeps_the_connection() {
     let offers = log.iter().filter(|e| *e == "signal Offer").count();
     assert_eq!(offers, 1, "events: {log:?}");
     ana.send(Command::StopBroadcast);
+}
+
+/// Counts how many times a stereo tone crosses zero going up: its frequency.
+fn rising_crossings(samples: &[f32]) -> usize {
+    let left: Vec<f32> = samples.chunks(2).map(|c| c[0]).collect();
+    left.windows(2)
+        .filter(|w| w[0] <= 0.0 && w[1] > 0.0)
+        .count()
+}
+
+#[test]
+fn sound_travels_with_the_picture_and_comes_out_as_the_same_tone() {
+    let (ana, beto) = pair();
+    let mut spec = BroadcastSpec::new(
+        BroadcastSource::Synthetic {
+            width: 640,
+            height: 360,
+        },
+        15,
+        2000,
+    );
+    spec.audio = Some(telinhas_media::AudioInput::Synthetic);
+    ana.send(Command::StartBroadcast {
+        spec,
+        viewers: vec![BETO],
+    });
+    let mut log = Vec::new();
+    wait_for(&ana, &beto, &mut log, "decoded sound", |b| {
+        b.stats()
+            .receiving
+            .get(&ANA)
+            .is_some_and(|r| r.audio.decoded >= 50)
+    });
+    let buffer = beto.audio(ANA).expect("a sound buffer for the broadcaster");
+    // Let half a second pile up, then read it all.
+    std::thread::sleep(Duration::from_millis(500));
+    let mut samples = vec![0f32; 48_000 * 2 / 2];
+    let real = buffer.pull(&mut samples);
+    assert!(real > 48_000 / 4, "only {real} samples were waiting");
+    let heard = &samples[..real];
+    let peak = heard.iter().fold(0f32, |p, s| p.max(s.abs()));
+    assert!((0.2..0.4).contains(&peak), "a 0.3 tone came out at {peak}");
+    // 440 Hz: about 440 rising crossings per second of sound.
+    let seconds = real as f32 / 2.0 / 48_000.0;
+    let hz = rising_crossings(heard) as f32 / seconds;
+    assert!((400.0..480.0).contains(&hz), "the tone came out at {hz} Hz");
+    let stats = beto.stats();
+    assert_eq!(stats.receiving[&ANA].audio.lost, 0, "{stats:?}");
 }

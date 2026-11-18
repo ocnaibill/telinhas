@@ -19,7 +19,9 @@ use rtc::peer_connection::configuration::RTCConfigurationBuilder;
 use rtc::peer_connection::configuration::interceptor_registry::{
     CongestionFeedback, configure_congestion_control, register_default_interceptors,
 };
-use rtc::peer_connection::configuration::media_engine::{MIME_TYPE_H264, MediaEngine};
+use rtc::peer_connection::configuration::media_engine::{
+    MIME_TYPE_H264, MIME_TYPE_OPUS, MediaEngine,
+};
 use rtc::peer_connection::sdp::RTCSessionDescription;
 use rtc::peer_connection::transport::RTCIceServer;
 use rtc::rtp::codec::h264::H264Packet;
@@ -43,6 +45,7 @@ use webrtc::peer_connection::{
 use webrtc::rtp_transceiver::RtpSender;
 use webrtc::runtime::{Runtime, default_runtime};
 
+use crate::audio::AudioUnit;
 use crate::picture::Picture;
 use crate::stamp;
 use crate::stats::{Stats, smooth};
@@ -136,6 +139,7 @@ struct RxContext {
     /// Where to ask the broadcaster for a new keyframe (the same path as the
     /// confirmations).
     requests: UnboundedSender<String>,
+    audio: StdSender<AudioUnit>,
     stats: Arc<Mutex<Stats>>,
     peer: PeerId,
 }
@@ -196,6 +200,37 @@ impl PeerConnectionEventHandler for Handler {
 
     async fn on_track(&self, track: Arc<dyn TrackRemote>) {
         let Some(rx) = &self.rx else { return };
+        if track.kind().await == RtpCodecKind::Audio {
+            let audio = rx.audio.clone();
+            rx.runtime.spawn(Box::pin(async move {
+                // One RTP packet is one Opus frame. A hole in the sequence
+                // numbers is told to the decoder, which conceals it.
+                let mut last: Option<u16> = None;
+                while let Some(event) = track.poll().await {
+                    let TrackRemoteEvent::OnRtpPacket(packet) = event else {
+                        continue;
+                    };
+                    let seq = packet.header.sequence_number;
+                    if let Some(last) = last {
+                        let step = seq.wrapping_sub(last);
+                        if step == 0 || step >= 0x8000 {
+                            continue; // repeated or late
+                        }
+                        if step > 1 {
+                            let _ = audio.send(AudioUnit::Lost((step - 1).min(5)));
+                        }
+                    }
+                    last = Some(seq);
+                    if audio
+                        .send(AudioUnit::Packet(packet.payload.to_vec()))
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }));
+            return;
+        }
         let units = rx.units.clone();
         let backlog = Arc::clone(&rx.backlog);
         let requests = rx.requests.clone();
@@ -267,6 +302,22 @@ pub(crate) fn parse_path(text: &str) -> Option<crate::stats::Path> {
     })
 }
 
+const OPUS_PAYLOAD_TYPE: PayloadType = 111;
+
+fn opus_codec() -> RTCRtpCodecParameters {
+    RTCRtpCodecParameters {
+        rtp_codec: RTCRtpCodec {
+            mime_type: MIME_TYPE_OPUS.to_owned(),
+            clock_rate: 48_000,
+            channels: 2,
+            // In-band FEC lets the decoder conceal a lost packet from the next.
+            sdp_fmtp_line: "minptime=10;useinbandfec=1".to_owned(),
+            rtcp_feedback: vec![],
+        },
+        payload_type: OPUS_PAYLOAD_TYPE,
+    }
+}
+
 fn h264_codec() -> RTCRtpCodecParameters {
     RTCRtpCodecParameters {
         rtp_codec: RTCRtpCodec {
@@ -294,6 +345,7 @@ async fn build(
 ) -> Result<Built> {
     let mut media_engine = MediaEngine::default();
     media_engine.register_codec(h264_codec(), RtpCodecKind::Video)?;
+    media_engine.register_codec(opus_codec(), RtpCodecKind::Audio)?;
 
     let estimator = ReportingEstimator {
         inner: Gcc::new(BWE_INITIAL, BWE_MIN, BWE_MAX),
@@ -385,6 +437,9 @@ pub(crate) struct SendLink {
     sender: Arc<dyn RtpSender>,
     /// Confirmations come back on it, and measurements go out on it.
     pub channel: Arc<dyn DataChannel>,
+    audio_track: Arc<TrackLocalStaticSample>,
+    audio_sender: Arc<dyn RtpSender>,
+    audio_writer: Option<(u32, PayloadType)>,
     /// The congestion controller's target for this path, in bits per second
     /// (as `f64` bits).
     pub estimate: Arc<AtomicU64>,
@@ -418,6 +473,30 @@ impl SendLink {
             .pc
             .add_track(Arc::clone(&track) as Arc<dyn TrackLocal>)
             .await?;
+        // The sound track is in every offer, so turning sound on later does
+        // not need a new negotiation: it only starts writing to it.
+        let audio_ssrc = rand::random::<u32>();
+        let audio_track = Arc::new(TrackLocalStaticSample::new(
+            Instant::now(),
+            MediaStreamTrack::new(
+                "telinhas-screen".to_owned(),
+                "telinhas-screen-audio".to_owned(),
+                "screen-audio".to_owned(),
+                RtpCodecKind::Audio,
+                vec![RTCRtpEncodingParameters {
+                    rtp_coding_parameters: RTCRtpCodingParameters {
+                        ssrc: Some(audio_ssrc),
+                        ..Default::default()
+                    },
+                    codec: opus_codec().rtp_codec,
+                    ..Default::default()
+                }],
+            ),
+        )?);
+        let audio_sender = built
+            .pc
+            .add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal>)
+            .await?;
         // Confirmations must not wait behind a retransmission: unordered and
         // unreliable, so a late one never holds back the ones after it.
         let channel = built
@@ -438,6 +517,9 @@ impl SendLink {
             track,
             sender,
             channel,
+            audio_track,
+            audio_sender,
+            audio_writer: None,
             estimate,
             writer: None,
         })
@@ -476,6 +558,22 @@ impl SendLink {
             .map(|codec| codec.payload_type)
             .ok_or_else(|| anyhow!("no negotiated codec"))?;
         self.writer = Some((ssrc, payload_type));
+        let audio_ssrc = *self
+            .audio_track
+            .ssrcs()
+            .await
+            .first()
+            .ok_or_else(|| anyhow!("audio track has no SSRC"))?;
+        let audio_payload_type = self
+            .audio_sender
+            .get_parameters()
+            .await?
+            .rtp_parameters
+            .codecs
+            .first()
+            .map(|codec| codec.payload_type)
+            .ok_or_else(|| anyhow!("no negotiated audio codec"))?;
+        self.audio_writer = Some((audio_ssrc, audio_payload_type));
         Ok(())
     }
 
@@ -492,6 +590,19 @@ impl SendLink {
     pub async fn write(&self, data: Bytes, duration: Duration) -> Result<()> {
         let (ssrc, payload_type) = self.writer.ok_or_else(|| anyhow!("not connected"))?;
         self.track
+            .sample_writer(ssrc, payload_type)
+            .write_sample(&Sample {
+                data,
+                duration,
+                ..Sample::new(Instant::now())
+            })
+            .await?;
+        Ok(())
+    }
+
+    pub async fn write_audio(&self, data: Bytes, duration: Duration) -> Result<()> {
+        let (ssrc, payload_type) = self.audio_writer.ok_or_else(|| anyhow!("not connected"))?;
+        self.audio_track
             .sample_writer(ssrc, payload_type)
             .write_sample(&Sample {
                 data,
@@ -527,22 +638,25 @@ impl RecvLink {
             backlog: feed.backlog,
             acks: Mutex::new(Some(feed.acks)),
             requests: feed.requests,
+            audio: feed.audio,
             stats,
             peer,
         };
         // The viewer runs the same interceptors so congestion feedback flows
         // back to the broadcaster.
         let built = build(link, runtime, Some(rx), Arc::new(AtomicU64::new(0))).await?;
-        built
-            .pc
-            .add_transceiver_from_kind(
-                RtpCodecKind::Video,
-                Some(RTCRtpTransceiverInit {
-                    direction: RTCRtpTransceiverDirection::Recvonly,
-                    ..Default::default()
-                }),
-            )
-            .await?;
+        for kind in [RtpCodecKind::Video, RtpCodecKind::Audio] {
+            built
+                .pc
+                .add_transceiver_from_kind(
+                    kind,
+                    Some(RTCRtpTransceiverInit {
+                        direction: RTCRtpTransceiverDirection::Recvonly,
+                        ..Default::default()
+                    }),
+                )
+                .await?;
+        }
         Ok(Self {
             pc: built.pc,
             gathered: built.gathered,
@@ -570,6 +684,7 @@ pub(crate) struct DecoderFeed {
     pub backlog: Arc<AtomicUsize>,
     pub acks: UnboundedReceiver<String>,
     pub requests: UnboundedSender<String>,
+    pub audio: StdSender<AudioUnit>,
 }
 
 /// The decoder thread's side of a `DecoderFeed`.
@@ -579,22 +694,29 @@ pub(crate) struct DecoderInput {
     pub acks: UnboundedSender<String>,
 }
 
-pub(crate) fn decoder_channels() -> (DecoderFeed, DecoderInput) {
+pub(crate) fn decoder_channels() -> (
+    DecoderFeed,
+    DecoderInput,
+    std::sync::mpsc::Receiver<AudioUnit>,
+) {
     let (units_tx, units_rx) = std::sync::mpsc::channel();
     let (acks_tx, acks_rx) = tokio::sync::mpsc::unbounded_channel();
     let backlog = Arc::new(AtomicUsize::new(0));
+    let (audio_tx, audio_rx) = std::sync::mpsc::channel();
     (
         DecoderFeed {
             units: units_tx,
             backlog: Arc::clone(&backlog),
             acks: acks_rx,
             requests: acks_tx.clone(),
+            audio: audio_tx,
         },
         DecoderInput {
             units: units_rx,
             backlog,
             acks: acks_tx,
         },
+        audio_rx,
     )
 }
 

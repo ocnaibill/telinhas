@@ -12,10 +12,11 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
 
+use crate::audio::{AudioBuffer, AudioInput, AudioPacket, spawn_audio, spawn_audio_decoder};
 use crate::link::{LinkConfig, RecvLink, SendLink, decoder_channels, spawn_decoder};
 use crate::send::{BroadcastSpec, Encoded, Targets, spawn_broadcast};
 use crate::stats::{Path, Stats, smooth};
-use crate::{Command, Event, EventSender, Latest};
+use crate::{AudioBuffers, Command, Event, EventSender, Latest};
 
 /// A picture unconfirmed for this long is considered lost.
 const LOST_AFTER: Duration = Duration::from_secs(2);
@@ -27,6 +28,7 @@ pub(crate) struct Shared {
     pub events: EventSender,
     pub latest: Latest,
     pub stats: Arc<Mutex<Stats>>,
+    pub audio: AudioBuffers,
     pub wake: Arc<dyn Fn() + Send + Sync>,
 }
 
@@ -44,6 +46,9 @@ struct Broadcast {
     targets: Targets,
     frames: broadcast::Sender<Arc<Encoded>>,
     thread: std::thread::JoinHandle<()>,
+    /// Encoded sound, if the broadcast has any.
+    sound: broadcast::Sender<Arc<AudioPacket>>,
+    sound_stop: Arc<AtomicBool>,
 }
 
 /// Dropping `stop` tells the task to close its connection and end.
@@ -121,6 +126,9 @@ fn start_broadcast(
     let stop = Arc::new(AtomicBool::new(false));
     let need_key = Arc::new(AtomicBool::new(false));
     let targets: Targets = Arc::default();
+    let (sound, _) = broadcast::channel(16);
+    let sound_stop = Arc::new(AtomicBool::new(false));
+    start_sound(shared, spec.audio.clone(), &sound, &sound_stop);
     let thread = spawn_broadcast(
         spec,
         frames.clone(),
@@ -139,10 +147,31 @@ fn start_broadcast(
         targets,
         frames,
         thread,
+        sound,
+        sound_stop,
     });
     for peer in viewers {
         start_outgoing(shared, state, peer);
     }
+}
+
+/// Starts the sound of a broadcast, if it has any.
+fn start_sound(
+    shared: &Arc<Shared>,
+    input: Option<AudioInput>,
+    out: &broadcast::Sender<Arc<AudioPacket>>,
+    stop: &Arc<AtomicBool>,
+) {
+    let Some(input) = input else {
+        return;
+    };
+    let shared = Arc::clone(shared);
+    spawn_audio(
+        input,
+        out.clone(),
+        Arc::clone(stop),
+        Arc::new(move |event| shared.tell(event)),
+    );
 }
 
 /// Changes what is broadcast (another screen or window, a new size or rate)
@@ -159,6 +188,10 @@ fn switch_broadcast(
     };
     old.stop.store(true, Ordering::Relaxed);
     let _ = old.thread.join();
+    // The sound restarts with it: the new source may have different sound.
+    old.sound_stop.store(true, Ordering::Relaxed);
+    let sound_stop = Arc::new(AtomicBool::new(false));
+    start_sound(shared, spec.audio.clone(), &old.sound, &sound_stop);
     let stop = Arc::new(AtomicBool::new(false));
     old.need_key.store(true, Ordering::Relaxed);
     let thread = spawn_broadcast(
@@ -176,6 +209,7 @@ fn switch_broadcast(
     state.broadcast = Some(Broadcast {
         stop,
         thread,
+        sound_stop,
         ..old
     });
     for peer in viewers {
@@ -188,6 +222,7 @@ fn switch_broadcast(
 fn stop_broadcast(shared: &Shared, state: &mut State) {
     if let Some(broadcast) = state.broadcast.take() {
         broadcast.stop.store(true, Ordering::Relaxed);
+        broadcast.sound_stop.store(true, Ordering::Relaxed);
     }
     state.outgoing.clear();
     shared.stats.lock().unwrap().viewers.clear();
@@ -204,6 +239,7 @@ fn drop_outgoing(shared: &Shared, state: &mut State, peer: PeerId) {
 
 fn drop_incoming(shared: &Shared, state: &mut State, peer: PeerId) {
     state.incoming.remove(&peer);
+    shared.audio.lock().unwrap().remove(&peer);
     shared.latest.lock().unwrap().remove(&peer);
     shared.stats.lock().unwrap().receiving.remove(&peer);
 }
@@ -221,6 +257,7 @@ fn start_outgoing(shared: &Arc<Shared>, state: &mut State, peer: PeerId) {
     let (answers_tx, answers) = unbounded_channel::<Value>();
     let (stop_tx, mut stop) = oneshot::channel::<()>();
     let frames = broadcast.frames.subscribe();
+    let sound = broadcast.sound.subscribe();
     let need_key = Arc::clone(&broadcast.need_key);
     let targets = Arc::clone(&broadcast.targets);
     let shared = Arc::clone(shared);
@@ -232,7 +269,7 @@ fn start_outgoing(shared: &Arc<Shared>, state: &mut State, peer: PeerId) {
             _ = &mut stop => {}
             // One viewer failing must not stop the others, so the error ends
             // only this task.
-            _ = drive_outgoing(&shared, peer, &mut link, answers, frames, &need_key, &targets) => {}
+            _ = drive_outgoing(&shared, peer, &mut link, answers, frames, sound, &need_key, &targets) => {}
         }
         targets.lock().unwrap().remove(&peer);
         link.close().await;
@@ -252,6 +289,7 @@ async fn drive_outgoing(
     link: &mut SendLink,
     mut answers: UnboundedReceiver<Value>,
     mut frames: broadcast::Receiver<Arc<Encoded>>,
+    mut sound: broadcast::Receiver<Arc<AudioPacket>>,
     need_key: &AtomicBool,
     targets: &Targets,
 ) -> anyhow::Result<()> {
@@ -277,6 +315,7 @@ async fn drive_outgoing(
     let mut sent: HashMap<u32, (Instant, Instant)> = HashMap::new();
     let mut path = Path::default();
     let mut open = false;
+    let mut sound_open = true;
     let mut last_feedback = Instant::now();
     loop {
         tokio::select! {
@@ -298,6 +337,15 @@ async fn drive_outgoing(
                 }
                 Err(RecvError::Lagged(_)) => need_key.store(true, Ordering::Relaxed),
                 Err(RecvError::Closed) => return Ok(()),
+            },
+            packet = sound.recv(), if sound_open => match packet {
+                Ok(packet) => {
+                    // A failed audio write must not take the picture down.
+                    let _ = link.write_audio(packet.data.clone(), crate::audio::FRAME_PERIOD).await;
+                }
+                Err(RecvError::Lagged(_)) => {}
+                // The sound ended: keep the picture going without it.
+                Err(RecvError::Closed) => sound_open = false,
             },
             event = link.channel.poll() => match event {
                 Some(DataChannelEvent::OnOpen) => open = true,
@@ -353,7 +401,14 @@ fn start_incoming(shared: &Arc<Shared>, state: &mut State, peer: PeerId, offer: 
     let (stop_tx, mut stop) = oneshot::channel::<()>();
     let shared = Arc::clone(shared);
     tokio::spawn(async move {
-        let (feed, input) = decoder_channels();
+        let (feed, input, audio_units) = decoder_channels();
+        let buffer = Arc::new(AudioBuffer::default());
+        shared
+            .audio
+            .lock()
+            .unwrap()
+            .insert(peer, Arc::clone(&buffer));
+        spawn_audio_decoder(audio_units, peer, Arc::clone(&shared.stats), buffer);
         let publisher = Arc::clone(&shared);
         let announced = AtomicBool::new(false);
         spawn_decoder(input, peer, Arc::clone(&shared.stats), move |picture| {

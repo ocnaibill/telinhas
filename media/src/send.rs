@@ -32,7 +32,7 @@ pub enum BroadcastSource {
     Window(isize),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BroadcastSpec {
     pub source: BroadcastSource,
     pub fps: u32,
@@ -43,6 +43,8 @@ pub struct BroadcastSpec {
     pub backend: Backend,
     /// Send at most this many lines (shrinking, never enlarging).
     pub max_height: Option<u32>,
+    /// The sound to send with the picture, if any.
+    pub audio: Option<crate::AudioInput>,
     pub cursor: bool,
     /// Leave the system's capture border on.
     pub border: bool,
@@ -63,6 +65,7 @@ impl BroadcastSpec {
             max_kbps,
             backend: Backend::Auto,
             max_height: None,
+            audio: None,
             cursor: true,
             border: false,
         }
