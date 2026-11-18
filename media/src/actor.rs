@@ -269,7 +269,7 @@ fn start_outgoing(shared: &Arc<Shared>, state: &mut State, peer: PeerId) {
             _ = &mut stop => {}
             // One viewer failing must not stop the others, so the error ends
             // only this task.
-            _ = drive_outgoing(&shared, peer, &mut link, answers, frames, sound, &need_key, &targets) => {}
+            _ = drive_outgoing(&shared, peer, &mut link, Feeds { answers, frames, sound }, &need_key, &targets) => {}
         }
         targets.lock().unwrap().remove(&peer);
         link.close().await;
@@ -283,16 +283,27 @@ fn start_outgoing(shared: &Arc<Shared>, state: &mut State, peer: PeerId) {
     );
 }
 
+/// What one viewer's link receives from the rest of the media layer.
+struct Feeds {
+    /// The viewer's answers to our offer.
+    answers: UnboundedReceiver<Value>,
+    frames: broadcast::Receiver<Arc<Encoded>>,
+    sound: broadcast::Receiver<Arc<AudioPacket>>,
+}
+
 async fn drive_outgoing(
     shared: &Shared,
     peer: PeerId,
     link: &mut SendLink,
-    mut answers: UnboundedReceiver<Value>,
-    mut frames: broadcast::Receiver<Arc<Encoded>>,
-    mut sound: broadcast::Receiver<Arc<AudioPacket>>,
+    feeds: Feeds,
     need_key: &AtomicBool,
     targets: &Targets,
 ) -> anyhow::Result<()> {
+    let Feeds {
+        mut answers,
+        mut frames,
+        mut sound,
+    } = feeds;
     let offer = link.create_offer().await?;
     shared.tell(Event::Signal {
         to: peer,

@@ -39,6 +39,9 @@ impl TelinhasApp {
                 });
                 self.show_toast(format!("A transmissão parou: {reason}"));
             }
+            Media::AudioFailed(reason) => {
+                self.show_toast(format!("O áudio parou, o vídeo continua: {reason}"));
+            }
             Media::Receiving(_) => {}
         }
     }
