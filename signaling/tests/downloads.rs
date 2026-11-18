@@ -1,6 +1,6 @@
 //! The `/dl` folder the app updates itself from.
 
-use telinhas_signaling::{Config, Hub, serve_with_downloads};
+use telinhas_signaling::{Config, Hub, serve_with_downloads, serve_with_files};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 async fn start(downloads: Option<std::path::PathBuf>) -> std::net::SocketAddr {
@@ -113,4 +113,37 @@ async fn the_updater_finds_and_downloads_a_release_from_this_server() {
     .unwrap();
     assert_eq!(found, "0.2.0");
     assert_eq!(saved, installer);
+}
+
+#[tokio::test]
+async fn the_site_is_served_at_the_root_without_hiding_the_rest() {
+    let dir = folder("site");
+    let site = dir.join("site");
+    let dl = dir.join("dl");
+    std::fs::create_dir_all(&site).unwrap();
+    std::fs::create_dir_all(&dl).unwrap();
+    std::fs::write(site.join("index.html"), "<h1>Telinhas</h1>").unwrap();
+    std::fs::write(dl.join("latest.json"), r#"{"version":"0.1.0"}"#).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(serve_with_files(
+        listener,
+        Hub::new(Config::default()),
+        Some(dl),
+        Some(site),
+    ));
+
+    let (status, reply) = get(addr, "/").await;
+    assert!(
+        status.contains("200") && reply.contains("<h1>Telinhas</h1>"),
+        "{reply}"
+    );
+    let (status, reply) = get(addr, "/dl/latest.json").await;
+    assert!(status.contains("200") && reply.contains("0.1.0"), "{reply}");
+    let (status, reply) = get(addr, "/healthz").await;
+    assert!(status.contains("200") && reply.ends_with("ok"), "{reply}");
+    let (status, _) = get(addr, "/nada-aqui").await;
+    assert!(status.contains("404"), "{status}");
+    let (_, reply) = get(addr, "/../secret.txt").await;
+    assert!(!reply.contains("not in the folder"));
 }

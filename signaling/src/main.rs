@@ -1,4 +1,4 @@
-use telinhas_signaling::{Config, Hub, PROTOCOL_VERSION, parse_ip_list, serve_with_downloads};
+use telinhas_signaling::{Config, Hub, PROTOCOL_VERSION, parse_ip_list, serve_with_files};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -15,6 +15,8 @@ async fn main() -> std::io::Result<()> {
     // A folder with `latest.json` and the installer, served at `/dl` so the
     // app can update itself from here.
     let downloads = std::env::var_os("TELINHAS_DOWNLOADS_DIR").map(std::path::PathBuf::from);
+    // The landing page, served at `/`.
+    let site = std::env::var_os("TELINHAS_SITE_DIR").map(std::path::PathBuf::from);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     println!(
         "telinhas-signaling (protocol v{PROTOCOL_VERSION}) listening on {}",
@@ -25,5 +27,9 @@ async fn main() -> std::io::Result<()> {
         Some(dir) => println!("downloads served at /dl from {}", dir.display()),
         None => println!("downloads: off (set TELINHAS_DOWNLOADS_DIR to serve /dl)"),
     }
-    serve_with_downloads(listener, Hub::new(config), downloads).await
+    match &site {
+        Some(dir) => println!("site served at / from {}", dir.display()),
+        None => println!("site: off (set TELINHAS_SITE_DIR to serve /)"),
+    }
+    serve_with_files(listener, Hub::new(config), downloads, site).await
 }

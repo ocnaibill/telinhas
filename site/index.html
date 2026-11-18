@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<script>document.documentElement.classList.add("js")</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telinhas</title>
+<meta name="description" content="Transmita sua tela para quem estiver na sala. Sem conta e sem gravação: o vídeo vai direto entre os participantes.">
+<meta name="theme-color" content="#0f1016">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f1016'/%3E%3Crect x='10' y='14' width='44' height='28' rx='9' fill='none' stroke='%23ecedf3' stroke-width='5'/%3E%3Crect x='18' y='47' width='28' height='5' rx='2.5' fill='%23ecedf3'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0f1016;
+    --panel: #16171f;
+    --card: #1e1f29;
+    --card-hi: #282a38;
+    --stroke: #323444;
+    --indigo: #5865f2;
+    --indigo-dim: #2e3478;
+    --green: #22c55e;
+    --green-dim: #143c28;
+    --amber: #f59e0b;
+    --amber-dim: #46300c;
+    --text: #ecedf3;
+    --text-dim: #a0a3b4;
+    --text-faint: #6e7184;
+    --radius: 18px;
+    --sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  .wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
+
+  /* ---- background: two slow glows ---- */
+  .glow {
+    position: fixed; inset: -20vmax; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(40vmax 30vmax at 20% 10%, rgba(88,101,242,.22), transparent 60%),
+      radial-gradient(35vmax 28vmax at 85% 30%, rgba(34,197,94,.12), transparent 60%),
+      radial-gradient(45vmax 35vmax at 60% 100%, rgba(88,101,242,.12), transparent 60%);
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+  @keyframes drift { to { transform: translate3d(-3vmax, 2vmax, 0) rotate(4deg); } }
+
+  /* ---- nav ---- */
+  nav { display: flex; align-items: center; gap: 12px; padding: 18px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; text-decoration: none; }
+  .brand svg { width: 34px; height: auto; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .pill.beta { background: var(--amber-dim); color: var(--amber); }
+  .pill.live { background: var(--green-dim); color: var(--green); }
+  .pill.indigo { background: var(--indigo-dim); color: #c7cbff; }
+  .spacer { flex: 1; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 12px 20px; border-radius: 12px; border: 0; cursor: pointer;
+    font: 600 15px var(--sans); text-decoration: none; white-space: nowrap;
+    transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn.primary { background: var(--indigo); color: #fff; box-shadow: 0 8px 30px -8px rgba(88,101,242,.7); }
+  .btn.primary:hover { transform: translateY(-2px); box-shadow: 0 14px 40px -10px rgba(88,101,242,.9); }
+  .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--stroke); }
+  .btn.ghost:hover { background: var(--card-hi); }
+  .btn.small { padding: 9px 14px; font-size: 14px; }
+
+  /* ---- hero ---- */
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 48px; align-items: center; padding: 56px 0 72px; }
+  .hero h1 { font-size: clamp(36px, 5.2vw, 62px); line-height: 1.05; letter-spacing: -0.03em; margin: 18px 0 18px; }
+  .hero h1 .accent {
+    background: linear-gradient(90deg, #8f99ff, var(--indigo) 45%, var(--green));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p.lead { font-size: clamp(17px, 1.6vw, 20px); color: var(--text-dim); margin: 0 0 28px; max-width: 34ch; }
+  .hero .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .hero .fine { margin-top: 14px; font-size: 13px; color: var(--text-faint); }
+
+  .logo-big { width: 92px; height: auto; display: block; }
+  .logo-big .spiral { transform-origin: 948px 600px; animation: spiral 9s ease-in-out infinite alternate; }
+  @keyframes spiral { from { transform: rotate(-9deg) scale(.97); } to { transform: rotate(9deg) scale(1.03); } }
+
+  /* ---- the app mock-up ---- */
+  .mock {
+    position: relative; border-radius: 22px; background: var(--panel);
+    border: 1px solid var(--stroke); overflow: hidden;
+    box-shadow: 0 40px 120px -40px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.02) inset;
+    transform: perspective(1400px) rotateY(-7deg) rotateX(3deg);
+    transition: transform .6s ease;
+  }
+  .mock:hover { transform: perspective(1400px) rotateY(-2deg) rotateX(1deg); }
+  .mock .top { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--stroke); flex-wrap: wrap; }
+  .chip { font: 600 12px var(--mono); padding: 5px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--stroke); color: var(--text); }
+  .mock .body { display: grid; grid-template-columns: minmax(0, 1fr) 150px; }
+  .stage { padding: 12px; }
+  .tile {
+    position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+    border: 2px solid var(--green);
+    background: #090a12;
+  }
+  /* a "game" on the shared screen: sky, hills moving, a sun, a runner */
+  .scene { position: absolute; inset: 0; }
+  .sky { position: absolute; inset: 0; background: linear-gradient(180deg, #1b1f5c 0%, #5865f2 55%, #f59e0b 100%); }
+  .sun { position: absolute; width: 22%; aspect-ratio: 1; border-radius: 50%; left: 62%; top: 34%;
+    background: radial-gradient(circle, #ffe7a8, #f59e0b 60%, transparent 62%); filter: blur(.3px);
+    animation: sun 6s ease-in-out infinite alternate; }
+  @keyframes sun { to { transform: translateY(-8%) scale(1.05); } }
+  .hills { position: absolute; left: 0; width: 200%; height: 46%; bottom: 0; background-repeat: repeat-x; animation: scroll 9s linear infinite; }
+  .hills.back { bottom: 14%; height: 40%; opacity: .55; animation-duration: 16s;
+    background-image: radial-gradient(60% 100% at 25% 100%, #2a2f7a 70%, transparent 71%), radial-gradient(60% 100% at 75% 100%, #2a2f7a 70%, transparent 71%);
+    background-size: 50% 100%; }
+  .hills.front {
+    background-image: radial-gradient(70% 100% at 25% 100%, #12142e 70%, transparent 71%), radial-gradient(55% 90% at 75% 100%, #171a3d 70%, transparent 71%);
+    background-size: 50% 100%; }
+  @keyframes scroll { to { transform: translateX(-50%); } }
+  .runner { position: absolute; left: 22%; bottom: 30%; width: 7%; aspect-ratio: 1; border-radius: 22%;
+    background: var(--green); box-shadow: 0 0 18px rgba(34,197,94,.8); animation: jump 1.4s cubic-bezier(.3,.7,.4,1) infinite; }
+  @keyframes jump { 0%, 100% { transform: translateY(0) rotate(0); } 45% { transform: translateY(-120%) rotate(180deg); } }
+  .hud { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; }
+  .hud .pill { background: rgba(0,0,0,.6); color: #fff; font-size: 11px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,.7); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+  .bar {
+    margin: 10px auto 0; width: max-content; display: flex; gap: 6px; padding: 7px 9px; border-radius: 999px;
+    background: rgba(18,19,26,.95); border: 1px solid var(--stroke);
+  }
+  .bar span { width: 26px; height: 26px; border-radius: 50%; background: var(--card); display: grid; place-items: center; }
+  .bar span svg { width: 14px; height: 14px; }
+  .bar .stop { width: auto; padding: 0 12px; border-radius: 999px; background: #3b1414; color: #fca5a5; font-size: 11px; font-weight: 600; }
+  .side { border-left: 1px solid var(--stroke); padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .side h4 { margin: 0 0 2px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+  .person { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #0f1016; flex: none; }
+  .person small { margin-left: auto; color: var(--green); font: 600 10px var(--mono); }
+
+  /* ---- sections ---- */
+  section { padding: 72px 0; }
+  .kicker { color: var(--indigo); font-weight: 700; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+  h2 { font-size: clamp(28px, 3.4vw, 40px); letter-spacing: -0.02em; margin: 8px 0 14px; line-height: 1.15; }
+  .sub { color: var(--text-dim); max-width: 60ch; margin: 0 0 36px; font-size: 17px; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; counter-reset: step; }
+  .card {
+    background: var(--card); border: 1px solid var(--stroke); border-radius: var(--radius); padding: 22px;
+    transition: transform .25s ease, border-color .25s ease, background .25s ease;
+  }
+  .card:hover { transform: translateY(-4px); border-color: #43465c; background: #222330; }
+  .step .num {
+    width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center;
+    background: var(--indigo-dim); color: #c7cbff; font-weight: 800; margin-bottom: 14px;
+  }
+  .step h3, .feature h3 { margin: 0 0 6px; font-size: 18px; }
+  .step p, .feature p { margin: 0; color: var(--text-dim); font-size: 15px; }
+  .code {
+    margin-top: 14px; font: 700 22px var(--mono); letter-spacing: .06em; padding: 10px 14px; border-radius: 12px;
+    background: #0a0b10; border: 1px solid var(--stroke); display: inline-block; min-width: 11ch;
+  }
+  .code .caret { display: inline-block; width: 2px; height: 1em; background: var(--indigo); vertical-align: -3px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .feature .icon {
+    width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 14px;
+    background: var(--indigo-dim); color: #c7cbff;
+  }
+  .feature .icon.green { background: var(--green-dim); color: var(--green); }
+  .feature .icon.amber { background: var(--amber-dim); color: var(--amber); }
+  .feature .icon svg { width: 22px; height: 22px; }
+  .stat { font: 800 34px var(--mono); letter-spacing: -0.02em; margin-bottom: 4px; }
+  .stat small { font-size: 15px; color: var(--text-dim); font-weight: 600; }
+
+  .notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .note { border-left: 3px solid var(--amber); }
+  .note.blue { border-left-color: var(--indigo); }
+  .note h3 { margin: 0 0 8px; font-size: 17px; }
+  .note p, .note li { color: var(--text-dim); font-size: 15px; margin: 0; }
+  .note ol { margin: 8px 0 0; padding-left: 20px; }
+  .note b { color: var(--text); }
+
+  .cta {
+    text-align: center; padding: 56px 24px; border-radius: 26px; border: 1px solid var(--stroke);
+    background: radial-gradient(60% 120% at 50% 0%, rgba(88,101,242,.28), transparent 70%), var(--panel);
+  }
+  .cta h2 { margin-top: 18px; }
+  .cta .logo-big { margin: 0 auto; width: 76px; }
+
+  footer { padding: 36px 0 48px; color: var(--text-faint); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+
+  /* ---- reveal on scroll ---- */
+  /* Hidden only when the script runs, so the page reads fine without it. */
+  .js .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
+  .js .reveal.in { opacity: 1; transform: none; }
+  .reveal.d1 { transition-delay: .08s; } .reveal.d2 { transition-delay: .16s; } .reveal.d3 { transition-delay: .24s; }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-top: 28px; }
+    .mock { transform: none; }
+    .mock:hover { transform: none; }
+    .steps, .features, .notes { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .mock .body { grid-template-columns: minmax(0, 1fr); }
+    .hero h1 { font-size: 34px; }
+    .bar { max-width: 100%; }
+    .side { display: none; }
+    nav .btn span.long { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .js .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+
+<!-- The logo, recolored for a dark page as the app does: dark becomes light. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <clipPath id="tv-clip"><rect x="133.79" y="137.87" width="1627.91" height="925.28" rx="400.34"/></clipPath>
+    <g id="logo">
+      <path fill="var(--text)" d="M1614.13,91.75C1521.67,33.62,1412.25,0,1294.98,0h-694.47C268.86,0,0,268.86,0,600.51h0c0,239.35,140.03,445.98,342.64,542.47,92.46,58.12,201.88,91.75,319.15,91.75h694.47c331.650,0,600.51-268.86,600.51-600.51h0c0-239.35-140.03-445.98-342.64-542.47Z"/>
+      <path fill="var(--text)" d="M1550.3,1265.36H406.47c-49.07,0-88.85,39.78-88.85,88.85h0c0,49.07,39.78,88.85,88.85,88.85h1143.83c49.07,0,88.85-39.78,88.85-88.85h0c0-49.07-39.78-88.85-88.85-88.85Z"/>
+    </g>
+  </defs>
+</svg>
+
+<header class="wrap">
+  <nav>
+    <a class="brand" href="#">
+      <svg viewBox="0 0 1957 1444" aria-hidden="true"><use href="#logo"/><g clip-path="url(#tv-clip)"><rect x="133" y="137" width="1630" height="927" fill="var(--bg)"/></g></svg>
+      Telinhas
+    </a>
+    <span class="pill beta">beta</span>
+    <span class="spacer"></span>
+    <a class="btn primary small" href="/dl/Telinhas-Setup.exe">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+      <span>Baixar <span class="long">para Windows</span></span>
+    </a>
+  </nav>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <svg class="logo-big reveal" viewBox="0 0 1957 1444" role="img" aria-label="Logo do Telinhas">
+        <use href="#logo"/>
+        <g clip-path="url(#tv-clip)">
+          <g class="spiral">
+            <rect x="-130.25" y="-98.86" width="2156" height="1398.73" rx="149.89" fill="var(--bg)" transform="translate(-52.04 91.34) rotate(-5.37)"/>
+            <rect x="218.84" y="140.53" width="1457.82" height="919.95" rx="149.89" fill="var(--text)" transform="translate(120.12 -157.03) rotate(10.11)"/>
+            <rect x="278.14" y="177.96" width="1339.2" height="845.1" rx="149.89" fill="var(--bg)" transform="translate(120.12 -157.03) rotate(10.11)"/>
+            <rect x="370.49" y="242.28" width="1154.52" height="728.55" rx="149.89" fill="var(--text)" transform="translate(289.22 -305.84) rotate(21.56)"/>
+            <rect x="417.45" y="271.91" width="1060.58" height="669.28" rx="149.89" fill="var(--bg)" transform="translate(289.22 -305.84) rotate(21.56)"/>
+            <rect x="442.3" y="291.2" width="980.32" height="618.63" rx="149.89" fill="var(--text)" transform="translate(412.71 -379.26) rotate(29.27)"/>
+            <rect x="482.18" y="316.36" width="900.56" height="568.29" rx="149.89" fill="var(--bg)" transform="translate(412.71 -379.26) rotate(29.27)"/>
+            <rect x="549.33" y="347.58" width="801.61" height="505.85" rx="149.89" fill="var(--text)" transform="translate(546.19 -448.39) rotate(36.64)"/>
+            <rect x="581.94" y="368.16" width="736.39" height="464.7" rx="149.89" fill="var(--bg)" transform="translate(546.19 -448.39) rotate(36.64)"/>
+            <rect x="637.22" y="405.83" width="617.01" height="389.37" rx="149.89" fill="var(--text)" transform="translate(914.69 -519.33) rotate(56)"/>
+            <rect x="662.32" y="421.67" width="566.81" height="357.69" rx="149.89" fill="var(--indigo)" transform="translate(914.69 -519.33) rotate(56)"/>
+          </g>
+        </g>
+      </svg>
+      <h1 class="reveal d1">Transmita sua tela para <span class="accent">quem estiver na sala.</span></h1>
+      <p class="lead reveal d2">Sem conta e sem gravação. O vídeo vai direto entre vocês, em 1080p a 60 quadros por segundo, quase sem atraso.</p>
+      <div class="actions reveal d3">
+        <a class="btn primary" href="/dl/Telinhas-Setup.exe">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+          Baixar para Windows
+        </a>
+        <a class="btn ghost" href="#como">Como funciona</a>
+      </div>
+      <div class="fine reveal d3"><span id="version">Beta</span> · Windows 10 e 11 · grátis</div>
+    </div>
+
+    <div class="mock reveal d2" aria-hidden="true">
+      <div class="top">
+        <span class="chip">K7QM-2XPA</span>
+        <span class="pill" style="background:var(--amber-dim);color:var(--amber)">♛ Administrador</span>
+        <span class="pill live">⚡ <span id="ms">48</span> ms</span>
+        <span class="spacer"></span>
+        <span class="pill indigo">1 ao vivo · 4 conectados</span>
+      </div>
+      <div class="body">
+        <div class="stage">
+          <div class="tile">
+            <div class="scene">
+              <div class="sky"></div>
+              <div class="sun"></div>
+              <div class="hills back"></div>
+              <div class="hills front"></div>
+              <div class="runner"></div>
+            </div>
+            <div class="hud">
+              <span class="pill"><span class="dot"></span>AO VIVO 1080p60</span>
+              <span class="pill">Bianco</span>
+            </div>
+          </div>
+          <div class="bar">
+            <span class="stop">■ Parar</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="#a0a3b4" stroke-width="2"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="#a0a3b4" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg></span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="#a0a3b4" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></span>
+          </div>
+        </div>
+        <div class="side">
+          <h4>Na sala</h4>
+          <div class="person"><span class="avatar" style="background:#8f99ff">B</span>Bianco<small>você</small></div>
+          <div class="person"><span class="avatar" style="background:#22c55e">G</span>Geraldo<small id="ms2">52</small></div>
+          <div class="person"><span class="avatar" style="background:#f59e0b">M</span>Miguel<small id="ms3">39</small></div>
+          <div class="person"><span class="avatar" style="background:#f472b6">R</span>Rafa<small id="ms4">61</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="como">
+    <div class="wrap">
+      <div class="kicker reveal">Como funciona</div>
+      <h2 class="reveal d1">Três passos, nenhum cadastro.</h2>
+      <p class="sub reveal d2">Quem cria a sala recebe um código. Quem tem o código entra. Pronto.</p>
+      <div class="steps">
+        <div class="card step reveal">
+          <div class="num">1</div>
+          <h3>Instale</h3>
+          <p>Baixe o instalador e abra. Ele não pede administrador, e o app se atualiza sozinho sempre que você abre.</p>
+        </div>
+        <div class="card step reveal d1">
+          <div class="num">2</div>
+          <h3>Crie uma sala e mande o código</h3>
+          <p>Escolha um apelido, crie a sala e passe o código para os amigos. Se quiser, aprove quem entra.</p>
+          <div class="code"><span id="code">K7QM-2XPA</span><span class="caret"></span></div>
+        </div>
+        <div class="card step reveal d2">
+          <div class="num">3</div>
+          <h3>Transmita</h3>
+          <p>Escolha a tela inteira ou uma janela, a resolução e o FPS. O som vai junto, e cada um ajusta o volume do seu lado.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="kicker reveal">Por que é diferente</div>
+      <h2 class="reveal d1">Feito para mostrar a tela, não para fazer reunião.</h2>
+      <p class="sub reveal d2">Nada de conta, de nuvem guardando seu vídeo, ou de qualidade cortada para caber num plano.</p>
+      <div class="features">
+        <div class="card feature reveal">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></div>
+          <div class="stat">1080p<small> a 60 fps</small></div>
+          <p>Codificado pela placa de vídeo, com a qualidade que você escolher.</p>
+        </div>
+        <div class="card feature reveal d1">
+          <div class="icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+          <div class="stat">~50<small> ms de atraso</small></div>
+          <p>Medido entre duas casas em redes diferentes. Dá para jogar e comentar junto.</p>
+        </div>
+        <div class="card feature reveal d2">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="m8.6 10.7 6.8-3.4m-6.8 6 6.8 3.4"/></svg></div>
+          <h3>Direto entre vocês</h3>
+          <p>O vídeo e o som não passam por servidor nenhum. O servidor só apresenta um ao outro.</p>
+        </div>
+        <div class="card feature reveal">
+          <div class="icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="m17 9 4 6m0-6-4 6"/></svg></div>
+          <h3>O som certo</h3>
+          <p>Transmita só o áudio da janela, ou a tela inteira tirando programas, como o Discord, para sua voz não voltar.</p>
+        </div>
+        <div class="card feature reveal d1">
+          <div class="icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Sem conta, sem gravação</h3>
+          <p>Você escolhe um apelido e pronto. Nada fica guardado depois que a sala acaba.</p>
+        </div>
+        <div class="card feature reveal d2">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></div>
+          <h3>Sempre atualizado</h3>
+          <p>Toda vez que abre, o app confere se há versão nova e se instala sozinho.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="kicker reveal">Antes de instalar</div>
+      <h2 class="reveal d1">Bom saber, porque é beta.</h2>
+      <p class="sub reveal d2">O Telinhas ainda não tem a assinatura digital paga que o Windows gosta de ver. Por isso ele pode desconfiar na primeira vez.</p>
+      <div class="notes">
+        <div class="card note reveal">
+          <h3>O Windows protegeu o computador?</h3>
+          <p>Na primeira instalação o SmartScreen pode avisar. É esperado:</p>
+          <ol>
+            <li>Clique em <b>Mais informações</b>.</li>
+            <li>Clique em <b>Executar assim mesmo</b>.</li>
+          </ol>
+        </div>
+        <div class="card note reveal d1">
+          <h3>Windows 11 com Smart App Control</h3>
+          <p>Se o app não abrir e aparecer “Imagem incorreta”, o <b>Smart App Control</b> está bloqueando. Ele pode ser desligado em Segurança do Windows &gt; Controle de aplicativos e do navegador. <b>Atenção:</b> em algumas versões do Windows ele não pode ser religado depois sem reinstalar o sistema.</p>
+        </div>
+        <div class="card note blue reveal">
+          <h3>Seu IP fica visível para quem está na sala</h3>
+          <p>Como o vídeo vai direto entre os computadores, cada participante consegue ver o endereço de rede dos outros. Entre amigos não é problema, mas só passe o código para quem você conhece.</p>
+        </div>
+        <div class="card note blue reveal d1">
+          <h3>O que ainda não tem</h3>
+          <p>Por enquanto é só Windows, e o foco é a tela com o som. Microfone e webcam ficam para depois; para conversar, continue usando o Discord junto.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="cta reveal">
+        <svg class="logo-big" viewBox="0 0 1957 1444" aria-hidden="true">
+          <use href="#logo"/>
+          <g clip-path="url(#tv-clip)">
+            <g class="spiral">
+              <rect x="-130.25" y="-98.86" width="2156" height="1398.73" rx="149.89" fill="var(--panel)" transform="translate(-52.04 91.34) rotate(-5.37)"/>
+              <rect x="218.84" y="140.53" width="1457.82" height="919.95" rx="149.89" fill="var(--text)" transform="translate(120.12 -157.03) rotate(10.11)"/>
+              <rect x="278.14" y="177.96" width="1339.2" height="845.1" rx="149.89" fill="var(--panel)" transform="translate(120.12 -157.03) rotate(10.11)"/>
+              <rect x="442.3" y="291.2" width="980.32" height="618.63" rx="149.89" fill="var(--text)" transform="translate(412.71 -379.26) rotate(29.27)"/>
+              <rect x="482.18" y="316.36" width="900.56" height="568.29" rx="149.89" fill="var(--panel)" transform="translate(412.71 -379.26) rotate(29.27)"/>
+              <rect x="637.22" y="405.83" width="617.01" height="389.37" rx="149.89" fill="var(--text)" transform="translate(914.69 -519.33) rotate(56)"/>
+              <rect x="662.32" y="421.67" width="566.81" height="357.69" rx="149.89" fill="var(--green)" transform="translate(914.69 -519.33) rotate(56)"/>
+            </g>
+          </g>
+        </svg>
+        <h2>Bora assistir junto?</h2>
+        <p class="sub" style="margin-inline:auto">Instale, crie a sala e mande o código no grupo.</p>
+        <a class="btn primary" href="/dl/Telinhas-Setup.exe">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+          Baixar para Windows
+        </a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>Telinhas · código aberto, licença Apache-2.0</span>
+  <span>Sem anúncios, sem rastreamento: esta página não carrega nada de fora.</span>
+</footer>
+
+<script>
+  // Show the version that is up for download, if the server says.
+  fetch("/dl/latest.json", { cache: "no-store" })
+    .then(r => r.ok ? r.json() : null)
+    .then(m => { if (m && m.version) document.getElementById("version").textContent = "Versão " + m.version + " (beta)"; })
+    .catch(() => {});
+
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Fade sections in as they come into view.
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }, { threshold: 0.15 });
+  document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+  if (!still) {
+    // Live-looking latency numbers in the mock-up.
+    const around = (base, spread) => Math.round(base + (Math.random() - .5) * spread);
+    setInterval(() => {
+      document.getElementById("ms").textContent = around(48, 10);
+      document.getElementById("ms2").textContent = around(52, 8);
+      document.getElementById("ms3").textContent = around(40, 8);
+      document.getElementById("ms4").textContent = around(60, 10);
+    }, 900);
+
+    // A room code being typed, over and over.
+    const alphabet = "ABCDEFGHJKMNPQRSTVWXYZ0123456789";
+    const randomCode = () => Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+    const el = document.getElementById("code");
+    let target = "K7QM2XPA", shown = 8;
+    setInterval(() => {
+      if (shown >= 8 + 6) { target = randomCode(); shown = 0; }
+      shown++;
+      const n = Math.min(shown, 8);
+      const text = target.slice(0, n);
+      el.textContent = n > 4 ? text.slice(0, 4) + "-" + text.slice(4) : text;
+    }, 160);
+  }
+</script>
+</body>
+</html>

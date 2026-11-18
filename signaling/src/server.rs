@@ -47,6 +47,20 @@ pub fn router_with_downloads(hub: Arc<Hub>, downloads: Option<PathBuf>) -> Route
     }
 }
 
+/// Everything, plus a site at `/` from a folder (the landing page). Paths the
+/// server already answers (`/ws`, `/healthz`, `/dl`) are not affected.
+pub fn router_with_files(
+    hub: Arc<Hub>,
+    downloads: Option<PathBuf>,
+    site: Option<PathBuf>,
+) -> Router {
+    let router = router_with_downloads(hub, downloads);
+    match site {
+        Some(dir) => router.fallback_service(ServeDir::new(dir)),
+        None => router,
+    }
+}
+
 /// Serves until the listener fails.
 pub async fn serve(listener: tokio::net::TcpListener, hub: Arc<Hub>) -> std::io::Result<()> {
     serve_with_downloads(listener, hub, None).await
@@ -58,9 +72,19 @@ pub async fn serve_with_downloads(
     hub: Arc<Hub>,
     downloads: Option<PathBuf>,
 ) -> std::io::Result<()> {
+    serve_with_files(listener, hub, downloads, None).await
+}
+
+/// Like [`serve`], with the downloads folder and the site of [`router_with_files`].
+pub async fn serve_with_files(
+    listener: tokio::net::TcpListener,
+    hub: Arc<Hub>,
+    downloads: Option<PathBuf>,
+    site: Option<PathBuf>,
+) -> std::io::Result<()> {
     axum::serve(
         listener,
-        router_with_downloads(hub, downloads).into_make_service_with_connect_info::<SocketAddr>(),
+        router_with_files(hub, downloads, site).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
 }

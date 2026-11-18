@@ -11,5 +11,7 @@ pub mod server;
 
 pub use hub::{Config, Hub, parse_ip_list};
 pub use protocol::PROTOCOL_VERSION;
-pub use server::{router, router_with_downloads, serve, serve_with_downloads};
+pub use server::{
+    router, router_with_downloads, router_with_files, serve, serve_with_downloads, serve_with_files,
+};
 pub use telinhas_protocol as protocol;
