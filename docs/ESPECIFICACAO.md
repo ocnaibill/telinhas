@@ -79,6 +79,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 | DEC-63 | Codec de áudio: **Opus** (48 kHz, estéreo, quadros de 20 ms), pela biblioteca de referência **libopus** (crate `opus`). Exige `cmake` no ambiente de build. Se isso virar problema, compara-se com o `opus-rs` (Rust puro). | Mantenedor (aceitou proposta) |
 | DEC-64 | O microfone é **misturado** ao áudio da transmissão, numa só faixa (DEC-16). Uma faixa separada para silenciar só a voz fica fora do MVP. | Mantenedor (aceitou proposta) |
 | DEC-65 | O áudio por aplicativo e a exclusão de aplicativos (DEC-16) exigem **Windows 10 versão 2004 ou mais novo**, por causa da captura de áudio por processo do WASAPI. Em versões anteriores o app avisa na interface. | Mantenedor (aceitou proposta) |
+| DEC-66 | No beta, o app e as DLLs do FFmpeg **não são assinados** (assinar tem custo recorrente). Quem tem o **Smart App Control** do Windows 11 ligado não consegue abrir o app e precisa desligá-lo; o site e o guia de distribuição explicam isso. Assinar o código volta à mesa antes de abrir para mais gente. | Mantenedor |
 
 ## 3. Requisitos funcionais (rascunho)
 
@@ -107,7 +108,7 @@ Caso de uso central: o grupo já está em call (ex.: Discord), mas o compartilha
 
 ## 4. Pontos em aberto
 
-Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-65.
+Nenhum por enquanto. Os pontos levantados em 15/11/2026 viraram DEC-22 a DEC-29, e os de tecnologia, reconexão e Linux viraram DEC-38 a DEC-66.
 
 ## 5. Fora do escopo
 

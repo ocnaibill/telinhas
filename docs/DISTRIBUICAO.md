@@ -44,6 +44,7 @@ Ao subir, ele imprime `downloads served at /dl from ...`. Sem a variável, `/dl`
 ## Limites conhecidos
 
 - **O instalador não é assinado.** O Windows SmartScreen vai avisar "o Windows protegeu seu computador" na primeira instalação: é preciso clicar em "Mais informações" e "Executar assim mesmo". Assinar exige um certificado de assinatura de código (pago).
+- **Smart App Control (Windows 11) bloqueia o app** (DEC-66). Com ele ligado, o Windows recusa as DLLs não assinadas ("Imagem incorreta", erro `0xc0e90002`). Confirmado no PC de um amigo: hash da DLL correto, `VerifiedAndReputablePolicyState = 1`. A saída no beta é desligá-lo em Segurança do Windows > Controle de aplicativos e do navegador > Configurações do Smart App Control. Aviso: em versões do Windows em que isso não pode ser desfeito sem reinstalar, quem desliga não consegue religar. A correção de verdade é assinar o código.
 - **A atualização confere o hash, mas não uma assinatura.** O hash vem do mesmo servidor que o arquivo, então protege de download corrompido ou truncado, e de um manifesto que aponte para outro servidor, mas não de quem controlar o servidor. Para o beta com amigos é aceitável; antes de abrir para o público, o próximo passo é assinar o instalador com uma chave que só o mantenedor tem e verificar a assinatura no app.
 - **As DLLs do FFmpeg são LGPL.** `installer/THIRD-PARTY-NOTICES.txt` vai junto no instalador. A revisão jurídica dos termos de redistribuição é do mantenedor.
 - Só Windows. No macOS e no Linux (M7) o instalador e a atualização serão outros.
