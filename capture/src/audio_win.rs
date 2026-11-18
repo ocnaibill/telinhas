@@ -273,7 +273,7 @@ fn run_tap(
             if frames == 0 {
                 break;
             }
-            capture.read_from_device_to_deque(&mut bytes).map_err(os)?;
+            let info = capture.read_from_device_to_deque(&mut bytes).map_err(os)?;
             shared.packets.fetch_add(1, Ordering::Relaxed);
             shared
                 .frames
@@ -281,6 +281,13 @@ fn run_tap(
             let gap = last_packet.elapsed().as_millis() as u32;
             shared.max_gap_ms.fetch_max(gap, Ordering::Relaxed);
             last_packet = Instant::now();
+            // Windows marks packets of silence: there is nothing to queue, and
+            // the mixer treats an empty queue as silence. Most captures of a
+            // mix of many programs are silent most of the time.
+            if info.flags.silent {
+                bytes.clear();
+                continue;
+            }
 
             let raw = bytes.make_contiguous();
             let mut peak = f32::from_bits(shared.peak_bits.load(Ordering::Relaxed));
@@ -421,9 +428,20 @@ fn discover(exclude: &[String], taps: &Mutex<Vec<Tap>>, stop: &AtomicBool) {
     }
     let excluded: HashSet<String> = exclude.iter().map(|n| normalize(n)).collect();
     let own = std::process::id();
+    let mut system = processes();
+    let mut refreshed = Instant::now();
     while !stop.load(Ordering::Relaxed) {
         if let Ok(found) = sessions() {
-            let system = processes();
+            // Reading every process is the costly part: do it only when a
+            // program shows up that is not in the table yet, or now and then
+            // to follow the processes that ended.
+            let unknown = found
+                .iter()
+                .any(|s| system.process(Pid::from_u32(s.pid)).is_none());
+            if unknown || refreshed.elapsed() >= Duration::from_secs(5) {
+                system = processes();
+                refreshed = Instant::now();
+            }
             let mut wanted: HashMap<u32, String> = HashMap::new();
             'session: for Session { pid, .. } in found {
                 let lineage = lineage(&system, pid);
