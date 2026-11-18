@@ -12,7 +12,7 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
 
-use crate::audio::{AudioBuffer, AudioInput, AudioPacket, spawn_audio, spawn_audio_decoder};
+use crate::audio::{AudioBuffer, AudioPacket, spawn_audio, spawn_audio_decoder};
 use crate::link::{LinkConfig, RecvLink, SendLink, decoder_channels, spawn_decoder};
 use crate::send::{BroadcastSpec, Encoded, Targets, spawn_broadcast};
 use crate::stats::{Path, Stats, smooth};
@@ -128,7 +128,7 @@ fn start_broadcast(
     let targets: Targets = Arc::default();
     let (sound, _) = broadcast::channel(16);
     let sound_stop = Arc::new(AtomicBool::new(false));
-    start_sound(shared, spec.audio.clone(), &sound, &sound_stop);
+    start_sound(shared, &spec, &sound, &sound_stop);
     let thread = spawn_broadcast(
         spec,
         frames.clone(),
@@ -158,16 +158,17 @@ fn start_broadcast(
 /// Starts the sound of a broadcast, if it has any.
 fn start_sound(
     shared: &Arc<Shared>,
-    input: Option<AudioInput>,
+    spec: &BroadcastSpec,
     out: &broadcast::Sender<Arc<AudioPacket>>,
     stop: &Arc<AtomicBool>,
 ) {
-    let Some(input) = input else {
+    if spec.audio.is_none() && !spec.mic {
         return;
-    };
+    }
     let shared = Arc::clone(shared);
     spawn_audio(
-        input,
+        spec.audio.clone(),
+        spec.mic,
         out.clone(),
         Arc::clone(stop),
         Arc::new(move |event| shared.tell(event)),
@@ -191,7 +192,7 @@ fn switch_broadcast(
     // The sound restarts with it: the new source may have different sound.
     old.sound_stop.store(true, Ordering::Relaxed);
     let sound_stop = Arc::new(AtomicBool::new(false));
-    start_sound(shared, spec.audio.clone(), &old.sound, &sound_stop);
+    start_sound(shared, &spec, &old.sound, &sound_stop);
     let stop = Arc::new(AtomicBool::new(false));
     old.need_key.store(true, Ordering::Relaxed);
     let thread = spawn_broadcast(

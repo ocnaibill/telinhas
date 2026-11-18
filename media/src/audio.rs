@@ -109,20 +109,22 @@ fn encoder() -> Result<Encoder, String> {
 /// Starts producing encoded frames into `out` until `stop` is set. The thread
 /// owns the capture, so dropping it ends the capture too.
 pub(crate) fn spawn_audio(
-    input: AudioInput,
+    input: Option<AudioInput>,
+    mic: bool,
     out: broadcast::Sender<Arc<AudioPacket>>,
     stop: Arc<AtomicBool>,
     tell: Arc<dyn Fn(Event) + Send + Sync>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        if let Err(reason) = run_audio(input, &out, &stop) {
+        if let Err(reason) = run_audio(input, mic, &out, &stop) {
             tell(Event::AudioFailed(reason));
         }
     })
 }
 
 fn run_audio(
-    input: AudioInput,
+    input: Option<AudioInput>,
+    mic: bool,
     out: &broadcast::Sender<Arc<AudioPacket>>,
     stop: &AtomicBool,
 ) -> Result<(), String> {
@@ -138,7 +140,7 @@ fn run_audio(
         }
     };
     match input {
-        AudioInput::Synthetic => {
+        Some(AudioInput::Synthetic) => {
             let mut frame = vec![0f32; FRAME_LEN];
             let mut tick = 0u64;
             let mut next = Instant::now();
@@ -161,17 +163,23 @@ fn run_audio(
             }
             Ok(())
         }
-        AudioInput::System { exclude } => capture(AudioSource::System { exclude }, send, stop),
-        AudioInput::Process { pid } => capture(AudioSource::Process { pid }, send, stop),
+        Some(AudioInput::System { exclude }) => {
+            capture(Some(AudioSource::System { exclude }), mic, send, stop)
+        }
+        Some(AudioInput::Process { pid }) => {
+            capture(Some(AudioSource::Process { pid }), mic, send, stop)
+        }
+        None => capture(None, mic, send, stop),
     }
 }
 
 fn capture(
-    source: AudioSource,
+    source: Option<AudioSource>,
+    mic: bool,
     send: impl FnMut(&[f32]) + Send + 'static,
     stop: &AtomicBool,
 ) -> Result<(), String> {
-    let capture = capture_audio::start_audio(source, send).map_err(|e| e.to_string())?;
+    let capture = capture_audio::start_audio(source, mic, send).map_err(|e| e.to_string())?;
     while !stop.load(Ordering::Relaxed) {
         std::thread::sleep(Duration::from_millis(50));
     }

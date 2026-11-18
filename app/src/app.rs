@@ -274,10 +274,16 @@ impl TelinhasApp {
         self.screen = Screen::Room;
         self.sim = Sim::default();
         if open_broadcast {
-            let mut draft = BroadcastDraft::new();
-            draft.clamp(&self.sources);
-            self.modal = Modal::Broadcast(Box::new(draft));
+            self.open_broadcast_modal();
         }
+    }
+
+    /// Opens the broadcast setup with fresh choices.
+    pub(crate) fn open_broadcast_modal(&mut self) {
+        self.sources.refresh_audio_apps();
+        let mut draft = BroadcastDraft::new();
+        draft.clamp(&self.sources);
+        self.modal = Modal::Broadcast(Box::new(draft));
     }
 
     pub(crate) fn leave_room(&mut self) {
@@ -663,6 +669,24 @@ mod tests {
             assert!(Instant::now() < deadline, "no video arrived at Beto");
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
+        // The modal's sound option is on by default: a tone stands in for the
+        // system's sound in the demonstration sources.
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            ana.poll_net();
+            beto.poll_net();
+            let decoded = beto
+                .media
+                .as_ref()
+                .and_then(|m| m.stats().receiving.get(&ana_id).map(|r| r.audio.decoded))
+                .unwrap_or(0);
+            if decoded >= 25 {
+                break;
+            }
+            assert!(Instant::now() < deadline, "no sound arrived at Beto");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(beto.media.as_ref().unwrap().audio(ana_id).is_some());
         assert_eq!(beto.room.as_ref().unwrap().streams.len(), 1);
         beto.diagnostics = true;
         frames(&mut beto, 3);

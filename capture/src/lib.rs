@@ -65,6 +65,9 @@ pub struct Window {
     pub title: String,
     /// Executable name, such as `chrome.exe`; empty if it cannot be read.
     pub process: String,
+    /// The process that owns the window, 0 if unknown. Its audio is the
+    /// window's audio (with the processes it started).
+    pub pid: u32,
     pub width: u32,
     pub height: u32,
     pub minimized: bool,

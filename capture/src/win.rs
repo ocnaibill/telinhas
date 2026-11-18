@@ -172,9 +172,14 @@ unsafe extern "system" fn collect_window(window: HWND, data: LPARAM) -> BOOL {
     BOOL(1)
 }
 
-fn process_name(window: HWND) -> String {
+fn process_id(window: HWND) -> u32 {
     let mut pid = 0u32;
     unsafe { GetWindowThreadProcessId(window, Some(&mut pid)) };
+    pid
+}
+
+fn process_name(window: HWND) -> String {
+    let pid = process_id(window);
     if pid == 0 {
         return String::new();
     }
@@ -282,6 +287,7 @@ pub fn list_windows() -> Result<Vec<Window>> {
             handle: handle.0 as isize,
             title: utf16_to_string(&title),
             process: process_name(handle),
+            pid: process_id(handle),
             width,
             height,
             minimized: unsafe { IsIconic(handle) }.as_bool(),

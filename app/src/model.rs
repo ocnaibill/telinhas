@@ -313,6 +313,20 @@ pub fn upload_kbps(per_viewer_kbps: u32, viewers: u32) -> u32 {
 
 // ----- broadcast setup (DEC-36) -----------------------------------------------------------
 
+/// The programs that have an audio session on any output device (so a program
+/// that plays through a virtual mixer shows up), and as a fallback the programs
+/// that have a window.
+fn audio_app_names(windows: &[capture::Window]) -> Vec<String> {
+    let mut names: Vec<String> = match capture::audio::list_audio_apps() {
+        Ok(apps) if !apps.is_empty() => apps.into_iter().map(|a| a.process).collect(),
+        _ => windows.iter().map(|w| w.process.clone()).collect(),
+    };
+    names.retain(|n| !n.is_empty());
+    names.sort_by_key(|n| n.to_lowercase());
+    names.dedup_by_key(|n| n.to_lowercase());
+    names
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceTab {
     Screens,
@@ -336,13 +350,7 @@ impl Sources {
         let windows = capture::list_windows();
         match (monitors, windows) {
             (Ok(monitors), Ok(windows)) if !monitors.is_empty() => {
-                let mut audio_apps: Vec<String> = windows
-                    .iter()
-                    .filter(|w| !w.process.is_empty())
-                    .map(|w| w.process.clone())
-                    .collect();
-                audio_apps.sort();
-                audio_apps.dedup();
+                let audio_apps = audio_app_names(&windows);
                 Self {
                     monitors,
                     windows,
@@ -351,6 +359,14 @@ impl Sources {
                 }
             }
             _ => Self::demo(),
+        }
+    }
+
+    /// Programs that make sound change while the app runs: look again when
+    /// the broadcast setup opens.
+    pub fn refresh_audio_apps(&mut self) {
+        if !self.is_demo {
+            self.audio_apps = audio_app_names(&self.windows);
         }
     }
 
@@ -369,6 +385,7 @@ impl Sources {
             handle,
             title: title.to_owned(),
             process: process.to_owned(),
+            pid: 0,
             width,
             height,
             minimized: false,

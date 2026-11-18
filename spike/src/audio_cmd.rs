@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use telinhas_capture::audio::{self, AudioSource, CHANNELS, SAMPLE_RATE};
 
-pub fn run(mode: &str, seconds: u64, exclude: &[String], out: &str) -> Result<()> {
+pub fn run(mode: &str, seconds: u64, exclude: &[String], mic: bool, out: &str) -> Result<()> {
     if mode == "list" {
         let apps = audio::list_audio_apps().context("listing the audio sessions")?;
         println!(
@@ -42,7 +42,7 @@ pub fn run(mode: &str, seconds: u64, exclude: &[String], out: &str) -> Result<()
     // The samples go to memory first, so writing the file never delays a frame.
     let samples: Arc<Mutex<Vec<f32>>> = Arc::default();
     let sink = Arc::clone(&samples);
-    let capture = audio::start_audio(source, move |frame| {
+    let capture = audio::start_audio(Some(source), mic, move |frame| {
         sink.lock().unwrap().extend_from_slice(frame);
     })
     .context("starting the audio capture (needs Windows 10 version 2004 or newer)")?;

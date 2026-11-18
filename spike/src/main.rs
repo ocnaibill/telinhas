@@ -32,6 +32,9 @@ enum Command {
         /// (such as `Discord,chrome`).
         #[arg(long, value_delimiter = ',')]
         exclude: Vec<String>,
+        /// Mix the default microphone in.
+        #[arg(long)]
+        mic: bool,
         #[arg(long, default_value = "audio-test.wav")]
         out: String,
     },
@@ -323,8 +326,9 @@ async fn main() -> Result<()> {
             mode,
             seconds,
             exclude,
+            mic,
             out,
-        } => telinhas_spike::audio_cmd::run(&mode, seconds, &exclude, &out),
+        } => telinhas_spike::audio_cmd::run(&mode, seconds, &exclude, mic, &out),
         Command::Probe => {
             telinhas_spike::probe::run();
             Ok(())

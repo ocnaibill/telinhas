@@ -258,9 +258,7 @@ impl TelinhasApp {
         self.sim = crate::app::Sim::default();
         self.reconnecting = false;
         if open_broadcast {
-            let mut draft = crate::model::BroadcastDraft::new();
-            draft.clamp(&self.sources);
-            self.modal = crate::app::Modal::Broadcast(Box::new(draft));
+            self.open_broadcast_modal();
         }
     }
 

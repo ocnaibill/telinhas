@@ -9,7 +9,7 @@
 //! [`AudioSource::System`] with a list of names to leave out therefore
 //! captures every other application separately and mixes them (DEC-16, DEC-41).
 
-use crate::Result;
+use crate::{Error, Result};
 
 /// Samples per channel in one frame handed to the callback: 20 ms at 48 kHz.
 pub const FRAME_SAMPLES: usize = 960;
@@ -71,7 +71,6 @@ mod imp;
 #[cfg(not(windows))]
 mod imp {
     use super::*;
-    use crate::Error;
 
     pub fn list_apps() -> Result<Vec<AudioApp>> {
         Err(Error::Unsupported)
@@ -90,7 +89,11 @@ mod imp {
         }
     }
 
-    pub fn start(_source: AudioSource, _on_frame: FrameSink) -> Result<Capture> {
+    pub fn start(
+        _source: Option<AudioSource>,
+        _mic: bool,
+        _on_frame: FrameSink,
+    ) -> Result<Capture> {
         Err(Error::Unsupported)
     }
 }
@@ -111,13 +114,18 @@ pub fn list_audio_apps() -> Result<Vec<AudioApp>> {
     imp::list_apps()
 }
 
-/// Starts capturing. `on_frame` gets `FRAME_SAMPLES * CHANNELS` interleaved
-/// samples every 20 ms, from its own thread, silence included.
+/// Starts capturing `source` and, with `mic`, the default microphone mixed
+/// into it. `on_frame` gets `FRAME_SAMPLES * CHANNELS` interleaved samples
+/// every 20 ms, from its own thread, silence included.
 pub fn start_audio(
-    source: AudioSource,
+    source: Option<AudioSource>,
+    mic: bool,
     on_frame: impl FnMut(&[f32]) + Send + 'static,
 ) -> Result<AudioCapture> {
+    if source.is_none() && !mic {
+        return Err(Error::Os("no audio source was asked for".to_owned()));
+    }
     Ok(AudioCapture {
-        inner: imp::start(source, Box::new(on_frame))?,
+        inner: imp::start(source, mic, Box::new(on_frame))?,
     })
 }

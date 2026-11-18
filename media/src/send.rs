@@ -45,6 +45,8 @@ pub struct BroadcastSpec {
     pub max_height: Option<u32>,
     /// The sound to send with the picture, if any.
     pub audio: Option<crate::AudioInput>,
+    /// Mix the default microphone into the sound (DEC-64).
+    pub mic: bool,
     pub cursor: bool,
     /// Leave the system's capture border on.
     pub border: bool,
@@ -66,6 +68,7 @@ impl BroadcastSpec {
             backend: Backend::Auto,
             max_height: None,
             audio: None,
+            mic: false,
             cursor: true,
             border: false,
         }

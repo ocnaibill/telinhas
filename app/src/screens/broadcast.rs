@@ -148,6 +148,26 @@ impl TelinhasApp {
                     None => BroadcastSource::Monitor(0),
                 },
             };
+            // Sound: a window brings its own program's, a screen brings the
+            // system's minus what the person left out. Without capture support
+            // (the demonstration sources) a tone stands in, to hear the path.
+            let audio = if !draft.system_audio {
+                None
+            } else if self.sources.is_demo {
+                Some(telinhas_media::AudioInput::Synthetic)
+            } else {
+                match draft.tab {
+                    SourceTab::Screens => Some(telinhas_media::AudioInput::System {
+                        exclude: draft.excluded_apps.clone(),
+                    }),
+                    SourceTab::Windows => self
+                        .sources
+                        .windows
+                        .get(draft.window)
+                        .filter(|w| w.pid != 0)
+                        .map(|w| telinhas_media::AudioInput::Process { pid: w.pid }),
+                }
+            };
             let viewers = room
                 .participants
                 .iter()
@@ -158,6 +178,8 @@ impl TelinhasApp {
                 spec: BroadcastSpec {
                     // What the person chose is the most it will ever send.
                     max_height: Some(height),
+                    audio,
+                    mic: draft.mic,
                     ..BroadcastSpec::new(
                         source,
                         draft.fps,

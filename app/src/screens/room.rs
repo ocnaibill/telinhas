@@ -6,10 +6,9 @@ use eframe::egui::{
     Stroke, StrokeKind, Vec2,
 };
 
-use crate::app::{Modal, TelinhasApp};
+use crate::app::TelinhasApp;
 use crate::model::{
-    BroadcastDraft, ConnectionState, Layout as RoomLayout, Quality, Room, StreamInfo, target_kbps,
-    upload_kbps,
+    ConnectionState, Layout as RoomLayout, Quality, Room, StreamInfo, target_kbps, upload_kbps,
 };
 use crate::theme;
 use crate::video::{self, VideoCallback};
@@ -85,9 +84,7 @@ impl TelinhasApp {
             self.show_toast("Código copiado");
         }
         if actions.open_broadcast {
-            let mut draft = BroadcastDraft::new();
-            draft.clamp(&self.sources);
-            self.modal = Modal::Broadcast(Box::new(draft));
+            self.open_broadcast_modal();
         }
         if actions.stop_broadcast {
             room.broadcasting = false;

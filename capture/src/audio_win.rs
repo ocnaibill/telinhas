@@ -185,6 +185,8 @@ enum Target {
     /// Everything except this process and its children.
     SystemExceptUs,
     Include(u32),
+    /// The default microphone.
+    Microphone,
 }
 
 fn start_tap(target: Target, label: String) -> Result<Tap> {
@@ -219,7 +221,7 @@ fn start_tap(target: Target, label: String) -> Result<Tap> {
         label,
         pid: match target {
             Target::Include(pid) => Some(pid),
-            Target::SystemExceptUs => None,
+            Target::SystemExceptUs | Target::Microphone => None,
         },
         queue,
         shared,
@@ -236,11 +238,21 @@ fn run_tap(
     ready: &std::sync::mpsc::Sender<Result<()>>,
 ) -> Result<()> {
     initialize_mta().ok().map_err(os)?;
-    let (pid, include) = match target {
-        Target::SystemExceptUs => (std::process::id(), false),
-        Target::Include(pid) => (pid, true),
+    let mut client = match target {
+        Target::SystemExceptUs => {
+            AudioClient::new_application_loopback_client(std::process::id(), false).map_err(os)?
+        }
+        Target::Include(pid) => {
+            AudioClient::new_application_loopback_client(pid, true).map_err(os)?
+        }
+        Target::Microphone => {
+            let enumerator = DeviceEnumerator::new().map_err(os)?;
+            let device = enumerator
+                .get_default_device(Direction::Capture)
+                .map_err(os)?;
+            device.get_iaudioclient().map_err(os)?
+        }
     };
-    let mut client = AudioClient::new_application_loopback_client(pid, include).map_err(os)?;
     let format = WaveFormat::new(
         32,
         32,
@@ -342,25 +354,31 @@ impl Drop for Capture {
     }
 }
 
-pub fn start(source: AudioSource, mut on_frame: FrameSink) -> Result<Capture> {
+pub fn start(source: Option<AudioSource>, mic: bool, mut on_frame: FrameSink) -> Result<Capture> {
     let taps: Arc<Mutex<Vec<Tap>>> = Arc::default();
     let stop = Arc::new(AtomicBool::new(false));
     let frames_out = Arc::new(AtomicU64::new(0));
     let mut threads = Vec::new();
 
+    if mic {
+        taps.lock()
+            .unwrap()
+            .push(start_tap(Target::Microphone, "microphone".to_owned())?);
+    }
     match source {
-        AudioSource::Process { pid } => {
+        None => {}
+        Some(AudioSource::Process { pid }) => {
             let label = format!("{} ({pid})", process_name(&processes(), pid));
             taps.lock()
                 .unwrap()
                 .push(start_tap(Target::Include(pid), label)?);
         }
-        AudioSource::System { exclude } if exclude.is_empty() => {
+        Some(AudioSource::System { exclude }) if exclude.is_empty() => {
             taps.lock()
                 .unwrap()
                 .push(start_tap(Target::SystemExceptUs, "system".to_owned())?);
         }
-        AudioSource::System { exclude } => {
+        Some(AudioSource::System { exclude }) => {
             // Windows cannot leave out several programs at once, so every other
             // program is captured on its own, as they appear and go.
             let (taps, stop) = (Arc::clone(&taps), Arc::clone(&stop));
@@ -464,8 +482,9 @@ fn discover(exclude: &[String], taps: &Mutex<Vec<Tap>>, stop: &AtomicBool) {
             let mut taps = taps.lock().unwrap();
             // Captures whose program is gone, or no longer wanted, or whose
             // thread ended on an error.
+            // (The microphone has no pid: it is not ours to manage here.)
             taps.retain(|tap| {
-                tap.pid.is_some_and(|pid| wanted.contains_key(&pid))
+                tap.pid.is_none_or(|pid| wanted.contains_key(&pid))
                     && !tap.shared.ended.load(Ordering::Relaxed)
             });
             for (pid, label) in wanted {
