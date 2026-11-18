@@ -45,9 +45,13 @@ impl TelinhasApp {
         let time = self.started.elapsed().as_secs_f32();
 
         let ctx = ui.ctx().clone();
-        let toggle = ctx.input(|i| i.key_pressed(egui::Key::F11))
-            || (self.fullscreen && ctx.input(|i| i.key_pressed(egui::Key::Escape)));
-        if ctx.input(|i| i.key_pressed(egui::Key::F3)) {
+        let toggle = ctx.input(|i| {
+            i.key_pressed(egui::Key::F11) || (i.modifiers.command && i.key_pressed(egui::Key::F))
+        }) || (self.fullscreen && ctx.input(|i| i.key_pressed(egui::Key::Escape)));
+        // F3 and F11 are media keys on a Mac, so there are letter shortcuts too.
+        if ctx.input(|i| {
+            i.key_pressed(egui::Key::F3) || (i.modifiers.command && i.key_pressed(egui::Key::D))
+        }) {
             self.diagnostics = !self.diagnostics;
         }
         if toggle {
@@ -151,7 +155,7 @@ impl TelinhasApp {
                         None => format!("{}  — ms", theme::icons::LIGHTNING),
                     };
                     theme::pill(ui, text, theme::GREEN, theme::GREEN_DIM)
-                    .on_hover_text("Atraso do vídeo, da captura até aparecer na tela do outro (F3 mostra os detalhes)");
+                    .on_hover_text("Atraso do vídeo, da captura até aparecer na tela do outro (F3 ou Cmd/Ctrl+D mostram os detalhes)");
                     theme::pill(
                         ui,
                         format!(
@@ -744,7 +748,7 @@ impl TelinhasApp {
                             let (icon, hint) = if self.fullscreen {
                                 (theme::icons::CORNERS_IN, "Sair da tela cheia (Esc)")
                             } else {
-                                (theme::icons::CORNERS_OUT, "Tela cheia (F11)")
+                                (theme::icons::CORNERS_OUT, "Tela cheia (F11 ou Cmd/Ctrl+F)")
                             };
                             if theme::icon_button(ui, icon, hint, self.fullscreen).clicked() {
                                 actions.fullscreen = true;
