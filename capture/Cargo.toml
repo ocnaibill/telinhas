@@ -40,3 +40,9 @@ windows = { version = "0.62", features = [
 # applications a sound belongs to.
 wasapi = "0.27.0"
 sysinfo = { version = "0.37", default-features = false, features = ["system"] }
+
+# Linux: the screen comes from the desktop portal (DEC-29, DEC-45) as a PipeWire stream.
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = { version = "0.14", default-features = false, features = ["tokio", "screencast"] }
+pipewire = "0.10"
+tokio = { version = "1.54.1", features = ["rt", "time", "sync"] }

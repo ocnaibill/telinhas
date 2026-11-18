@@ -16,9 +16,14 @@ mod win;
 #[cfg(windows)]
 use win as imp;
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as imp;
+
+#[cfg(not(any(windows, target_os = "linux")))]
 mod stub;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 use stub as imp;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -120,6 +125,10 @@ pub enum Source {
     Monitor(usize),
     /// A window, by the `handle` of [`list_windows`].
     Window(isize),
+    /// Whatever the person picks in the desktop's own dialog (Linux, DEC-29).
+    /// The portal does not list screens or windows to the app, so there is
+    /// nothing to choose from before asking.
+    Portal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -247,7 +256,7 @@ mod tests {
         assert_eq!(GpuVendor::from_pci(0x1234), GpuVendor::Other(0x1234));
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     #[test]
     fn other_systems_report_unsupported() {
         assert_eq!(list_monitors(), Err(Error::Unsupported));

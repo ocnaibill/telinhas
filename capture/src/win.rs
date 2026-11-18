@@ -515,6 +515,8 @@ fn create_item(source: Source) -> Result<GraphicsCaptureItem> {
             unsafe { interop.CreateForMonitor(handle)? }
         }
         Source::Window(handle) => unsafe { interop.CreateForWindow(HWND(handle as *mut c_void))? },
+        // The portal is a Linux thing: Windows lists its own screens and windows.
+        Source::Portal => return Err(Error::Unsupported),
     };
     Ok(item)
 }
