@@ -1,6 +1,7 @@
 //! HTTP and WebSocket front end.
 
 use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -8,10 +9,13 @@ use axum::Router;
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, State};
-use axum::http::HeaderMap;
+use axum::http::header::CACHE_CONTROL;
+use axum::http::{HeaderMap, HeaderValue};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use tokio::sync::mpsc;
+use tower_http::services::ServeDir;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::hub::{Config, Hub, Out};
 use crate::protocol::{ErrorCode, encode};
@@ -24,11 +28,39 @@ pub fn router(hub: Arc<Hub>) -> Router {
         .with_state(hub)
 }
 
+/// The same router, plus `/dl` serving the files of a folder (read only):
+/// where the app finds `latest.json` and the installer to update itself. No
+/// folder means no `/dl`. The server writes nothing to disk (RNF-20).
+pub fn router_with_downloads(hub: Arc<Hub>, downloads: Option<PathBuf>) -> Router {
+    let router = router(hub);
+    match downloads {
+        Some(dir) => router.merge(
+            Router::new()
+                .nest_service("/dl", ServeDir::new(dir))
+                // The app must see a new version as soon as it is published.
+                .layer(SetResponseHeaderLayer::overriding(
+                    CACHE_CONTROL,
+                    HeaderValue::from_static("no-cache"),
+                )),
+        ),
+        None => router,
+    }
+}
+
 /// Serves until the listener fails.
 pub async fn serve(listener: tokio::net::TcpListener, hub: Arc<Hub>) -> std::io::Result<()> {
+    serve_with_downloads(listener, hub, None).await
+}
+
+/// Like [`serve`], with the downloads folder of [`router_with_downloads`].
+pub async fn serve_with_downloads(
+    listener: tokio::net::TcpListener,
+    hub: Arc<Hub>,
+    downloads: Option<PathBuf>,
+) -> std::io::Result<()> {
     axum::serve(
         listener,
-        router(hub).into_make_service_with_connect_info::<SocketAddr>(),
+        router_with_downloads(hub, downloads).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
 }
