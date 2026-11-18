@@ -28,12 +28,6 @@ telinhas-net = { path = "../net" }
 telinhas-update = { path = "../update" }
 telinhas-protocol = { path = "../protocol" }
 
-# On Linux, play through the PulseAudio protocol: PipeWire and PulseAudio both
-# speak it (no extra library to load), and it needs none of the ALSA plugins
-# that a plain ALSA output needs to reach the sound server.
-[target.'cfg(target_os = "linux")'.dependencies]
-cpal = { version = "0.18", features = ["pulseaudio"] }
-
 # The encoder is picked when a broadcast starts: hardware if it works, software
 # otherwise. On Windows the hardware code is always compiled in, which needs the
 # FFmpeg development files and libclang to build, and the FFmpeg DLLs to run.

@@ -137,32 +137,12 @@ pub struct Playback {
     pub description: String,
 }
 
-/// The sound systems to try, in order, each with its name and the host or why
-/// it could not even be opened. The system default comes first: on most
-/// desktops ALSA is wired to PipeWire or PulseAudio already. On Linux the
-/// PulseAudio protocol is the second try, for setups where it is not.
-fn hosts() -> Vec<(String, Result<cpal::Host, String>)> {
-    let default = cpal::default_host();
-    let mut hosts = vec![(default.id().to_string(), Ok(default))];
-    #[cfg(target_os = "linux")]
-    hosts.push((
-        "PulseAudio".to_owned(),
-        cpal::host_from_id(cpal::HostId::PulseAudio).map_err(|e| e.to_string()),
-    ));
-    hosts
-}
-
 impl Playback {
-    /// Opens the default output device, on the first sound system that works.
+    /// Opens the default output device. On Linux this is ALSA, which the
+    /// desktops wire to PipeWire or PulseAudio (a bare setup, like WSL, needs
+    /// `libasound2-plugins` and an `~/.asoundrc` that makes `pulse` the default).
     pub fn start() -> Result<Self, String> {
-        let mut problems = Vec::new();
-        for (name, host) in hosts() {
-            match host.and_then(|host| Self::start_on(&host)) {
-                Ok(playback) => return Ok(playback),
-                Err(problem) => problems.push(format!("{name}: {problem}")),
-            }
-        }
-        Err(problems.join("; "))
+        Self::start_on(&cpal::default_host())
     }
 
     fn start_on(host: &cpal::Host) -> Result<Self, String> {
