@@ -20,6 +20,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// M5 spike: captures audio on Windows (the system, one program, or the
+    /// system without some programs) and writes a WAV file.
+    Audio {
+        /// `list`, `system` or `app:PID`.
+        #[arg(default_value = "list")]
+        mode: String,
+        #[arg(long, default_value_t = 10)]
+        seconds: u64,
+        /// Programs to leave out of `system`, separated by commas
+        /// (such as `Discord,chrome`).
+        #[arg(long, value_delimiter = ',')]
+        exclude: Vec<String>,
+        #[arg(long, default_value = "audio-test.wav")]
+        out: String,
+    },
     /// Two peers in this process, over loopback.
     Loopback {
         #[arg(long, default_value_t = 10)]
@@ -304,6 +319,12 @@ async fn main() -> Result<()> {
             cap_change,
             keyframe_at,
         }),
+        Command::Audio {
+            mode,
+            seconds,
+            exclude,
+            out,
+        } => telinhas_spike::audio_cmd::run(&mode, seconds, &exclude, &out),
         Command::Probe => {
             telinhas_spike::probe::run();
             Ok(())

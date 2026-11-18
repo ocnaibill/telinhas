@@ -36,3 +36,7 @@ windows = { version = "0.62", features = [
     "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
 ] }
+# Audio capture per process (WASAPI) and the process tree, to tell which
+# applications a sound belongs to.
+wasapi = "0.27.0"
+sysinfo = { version = "0.37", default-features = false, features = ["system"] }

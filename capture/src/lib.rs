@@ -9,6 +9,8 @@ use std::fmt;
 mod pacer;
 pub use pacer::Pacer;
 
+pub mod audio;
+
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]

@@ -3,6 +3,7 @@
 //! Exists to answer one question for DEC-38: is `webrtc-rs` good enough?
 //! It is throwaway code, not the app.
 
+pub mod audio_cmd;
 pub mod capture_cmd;
 pub mod encode_cmd;
 pub mod frames;
