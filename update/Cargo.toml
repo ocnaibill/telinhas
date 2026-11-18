@@ -1,0 +1,17 @@
+[package]
+name = "telinhas-update"
+description = "Self-update for Telinhas: find a newer version, download it, check it, run its installer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+semver = "1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.10"
+ureq = { version = "3.5", default-features = false, features = ["rustls"] }
