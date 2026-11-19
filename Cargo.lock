@@ -4927,7 +4927,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "telinhas"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "cpal",
  "eframe",
@@ -4946,7 +4946,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-capture"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ashpd",
  "pipewire",
@@ -4958,7 +4958,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-codec"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ffmpeg-the-third",
  "libc",
@@ -4967,7 +4967,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-media"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4987,7 +4987,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-net"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "futures-util",
  "rand 0.10.4",
@@ -5000,7 +5000,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-protocol"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -5009,7 +5009,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-signaling"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "futures-util",
@@ -5027,7 +5027,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-spike"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5051,7 +5051,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-ui-spike"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
  "eframe",
@@ -5060,7 +5060,7 @@ dependencies = [
 
 [[package]]
 name = "telinhas-update"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "semver",
  "serde",
