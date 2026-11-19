@@ -53,6 +53,14 @@ impl TelinhasApp {
             i.key_pressed(egui::Key::F3) || (i.modifiers.command && i.key_pressed(egui::Key::D))
         }) {
             self.diagnostics = !self.diagnostics;
+            if self.diagnostics && !self.nat_started {
+                self.nat_started = true;
+                let (slot, ctx) = (std::sync::Arc::clone(&self.nat), ctx.clone());
+                std::thread::spawn(move || {
+                    *slot.lock().unwrap() = Some(telinhas_media::check_nat());
+                    ctx.request_repaint();
+                });
+            }
         }
         if toggle {
             self.fullscreen = !self.fullscreen;
@@ -330,7 +338,11 @@ impl TelinhasApp {
         for ((peer, outgoing), link) in links {
             connections.push(format!(
                 "{} {}: {}",
-                if *outgoing { "ENVIO para" } else { "RECEBIMENTO de" },
+                if *outgoing {
+                    "ENVIO para"
+                } else {
+                    "RECEBIMENTO de"
+                },
                 name(*peer),
                 link.stage
             ));
@@ -352,6 +364,26 @@ impl TelinhasApp {
         if let Some(path) = telinhas_media::log_path() {
             header.push(format!("registro: {}", path.display()));
         }
+        header.push(match &*self.nat.lock().unwrap() {
+            None => "NAT: verificando...".to_owned(),
+            Some(report) => {
+                let verdict = match report.verdict {
+                    telinhas_media::NatVerdict::Friendly => {
+                        "normal: a conexão direta pode funcionar"
+                    }
+                    telinhas_media::NatVerdict::Symmetric => {
+                        "SIMÉTRICO: a conexão direta falha, precisa de relay"
+                    }
+                    telinhas_media::NatVerdict::Inconclusive => {
+                        "inconclusivo: só um servidor respondeu"
+                    }
+                    telinhas_media::NatVerdict::Blocked => {
+                        "sem resposta: o UDP para a internet pode estar bloqueado"
+                    }
+                };
+                format!("NAT: {verdict}   ({})", report.detail)
+            }
+        });
         header.extend(connections);
         if lines.is_empty() {
             lines.push("Sem vídeo ainda.".to_owned());

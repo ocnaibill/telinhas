@@ -111,6 +111,10 @@ pub struct TelinhasApp {
     pub(crate) fullscreen: bool,
     /// The numbers panel over the video (F3).
     pub(crate) diagnostics: bool,
+    /// What kind of NAT this connection sits behind; asked the first time the
+    /// diagnostics open, because it takes a moment.
+    pub(crate) nat: std::sync::Arc<std::sync::Mutex<Option<telinhas_media::NatReport>>>,
+    pub(crate) nat_started: bool,
     /// Fill the tile and cut the edges, instead of keeping the proportions
     /// (DEC-62). A local choice of whoever watches.
     pub(crate) fill_video: bool,
@@ -250,6 +254,8 @@ impl TelinhasApp {
             fullscreen: false,
             updater: None,
             diagnostics: false,
+            nat: std::sync::Arc::default(),
+            nat_started: false,
             fill_video: false,
             wake: None,
         }
