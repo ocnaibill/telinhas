@@ -419,6 +419,29 @@ async fn wait_connected(state: &mut watch::Receiver<RTCPeerConnectionState>) -> 
     Ok(())
 }
 
+/// The kinds of address in a session description, such as
+/// `host 192.168.0.5, srflx 203.0.113.9`. No `srflx` means the STUN server was
+/// not reached; no candidates at all means no usable network interface.
+pub(crate) fn candidate_summary(description: &Value) -> String {
+    let Some(sdp) = description.get("sdp").and_then(Value::as_str) else {
+        return "sem descrição".to_owned();
+    };
+    let found: Vec<String> = sdp
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("a=candidate:"))
+        .filter_map(|rest| {
+            let fields: Vec<&str> = rest.split_whitespace().collect();
+            let kind = fields.iter().position(|f| *f == "typ")?;
+            Some(format!("{} {}", fields.get(kind + 1)?, fields.get(4)?))
+        })
+        .collect();
+    if found.is_empty() {
+        "nenhum".to_owned()
+    } else {
+        found.join(", ")
+    }
+}
+
 async fn local_description(pc: &Arc<dyn PeerConnection>) -> Result<Value> {
     let description = pc
         .local_description()
@@ -622,6 +645,7 @@ impl SendLink {
 pub(crate) struct RecvLink {
     pc: Arc<dyn PeerConnection>,
     gathered: watch::Receiver<bool>,
+    state: watch::Receiver<RTCPeerConnectionState>,
 }
 
 impl RecvLink {
@@ -660,7 +684,13 @@ impl RecvLink {
         Ok(Self {
             pc: built.pc,
             gathered: built.gathered,
+            state: built.state,
         })
+    }
+
+    /// Follows the connection's state, such as `connecting` or `failed`.
+    pub fn watch_state(&self) -> watch::Receiver<RTCPeerConnectionState> {
+        self.state.clone()
     }
 
     /// Takes the offer, returns the answer.
@@ -817,5 +847,25 @@ mod tests {
         assert!(!watch.lost(0), "the counter wraps around");
         assert!(!watch.lost(1));
         assert!(!watch.lost(0), "a repeated packet");
+    }
+}
+
+#[cfg(test)]
+mod candidate_tests {
+    use super::*;
+
+    #[test]
+    fn candidates_are_summed_up_by_kind_and_address() {
+        let sdp = "v=0\r\na=candidate:1 1 udp 2130706431 192.168.0.5 50000 typ host\r\na=candidate:2 1 udp 1694498815 203.0.113.9 50000 typ srflx raddr 0.0.0.0 rport 0\r\n";
+        let description = serde_json::json!({ "type": "offer", "sdp": sdp });
+        assert_eq!(
+            candidate_summary(&description),
+            "host 192.168.0.5, srflx 203.0.113.9"
+        );
+        assert_eq!(
+            candidate_summary(&serde_json::json!({ "sdp": "v=0\r\n" })),
+            "nenhum"
+        );
+        assert_eq!(candidate_summary(&serde_json::json!({})), "sem descrição");
     }
 }

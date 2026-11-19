@@ -21,6 +21,19 @@ pub struct Path {
     pub estimate_kbps: f32,
 }
 
+/// Where one connection to another person stands, in words for the diagnostics.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LinkStatus {
+    /// `criando`, `oferta enviada`, `connecting`, `connected`, `failed`...
+    pub stage: String,
+    /// The addresses this side offered, by kind: `host 192.168.0.5, srflx 203.0.113.9`.
+    pub local: String,
+    /// The addresses the other side offered.
+    pub remote: String,
+    /// Why it stopped, if it did.
+    pub error: Option<String>,
+}
+
 /// The broadcaster's own numbers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Sending {
@@ -71,6 +84,10 @@ pub struct Receiving {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Stats {
+    /// How each connection to another person is going, by peer and whether we
+    /// are the broadcaster (`true`) or the viewer (`false`). It is what to read
+    /// when nothing arrives.
+    pub links: HashMap<(PeerId, bool), LinkStatus>,
     pub sending: Option<Sending>,
     pub viewers: HashMap<PeerId, Path>,
     pub receiving: HashMap<PeerId, Receiving>,

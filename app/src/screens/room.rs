@@ -272,6 +272,7 @@ impl TelinhasApp {
             return;
         };
         let stats = media.stats();
+        let mut connections: Vec<String> = Vec::new();
         let name = |peer| room.name_of(peer).unwrap_or("?").to_owned();
         let path_line = |p: &telinhas_media::Path| {
             format!(
@@ -322,9 +323,41 @@ impl TelinhasApp {
                 lines.push(format!("  {}", path_line(&r.path)));
             }
         }
+        // The connections come first: when nothing arrives, this is where
+        // the reason is.
+        let mut links: Vec<_> = stats.links.iter().collect();
+        links.sort_by_key(|((peer, outgoing), _)| (peer.to_string(), *outgoing));
+        for ((peer, outgoing), link) in links {
+            connections.push(format!(
+                "{} {}: {}",
+                if *outgoing { "ENVIO para" } else { "RECEBIMENTO de" },
+                name(*peer),
+                link.stage
+            ));
+            if !link.local.is_empty() || !link.remote.is_empty() {
+                connections.push(format!(
+                    "    endereços daqui: {}   de lá: {}",
+                    link.local, link.remote
+                ));
+            }
+            if let Some(error) = &link.error {
+                connections.push(format!("    ERRO: {error}"));
+            }
+        }
+        let mut header = vec![format!(
+            "Telinhas {}   servidor: {}",
+            env!("CARGO_PKG_VERSION"),
+            self.server
+        )];
+        if let Some(path) = telinhas_media::log_path() {
+            header.push(format!("registro: {}", path.display()));
+        }
+        header.extend(connections);
         if lines.is_empty() {
             lines.push("Sem vídeo ainda.".to_owned());
         }
+        header.extend(lines);
+        let lines = header;
         egui::Area::new(theme::id("diagnostics"))
             .anchor(
                 Align2::LEFT_TOP,

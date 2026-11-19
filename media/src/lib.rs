@@ -13,6 +13,7 @@
 mod actor;
 mod audio;
 mod link;
+mod log;
 mod picture;
 mod scale;
 mod send;
@@ -25,9 +26,10 @@ use std::sync::{Arc, Mutex};
 
 pub use audio::{AudioBuffer, AudioInput};
 pub use link::LinkConfig;
+pub use log::path as log_path;
 pub use picture::Picture;
 pub use send::{BroadcastSource, BroadcastSpec};
-pub use stats::{AudioReceiving, Path, Receiving, Sending, Stats};
+pub use stats::{AudioReceiving, LinkStatus, Path, Receiving, Sending, Stats};
 pub use telinhas_protocol::{PeerId, SignalKind, Value};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 

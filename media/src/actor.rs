@@ -33,6 +33,32 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    /// Records how a connection stands, for the diagnostics and the log file.
+    fn note(
+        &self,
+        peer: PeerId,
+        outgoing: bool,
+        change: impl FnOnce(&mut crate::stats::LinkStatus),
+    ) {
+        let mut stats = self.stats.lock().unwrap();
+        let status = stats.links.entry((peer, outgoing)).or_default();
+        let before = status.clone();
+        change(status);
+        if *status != before {
+            let direction = if outgoing { "envio" } else { "recebimento" };
+            crate::log::line(&format!(
+                "{direction} {peer:?}: {} | locais: {} | remotos: {}{}",
+                status.stage,
+                status.local,
+                status.remote,
+                status
+                    .error
+                    .as_ref()
+                    .map_or(String::new(), |e| format!(" | erro: {e}"))
+            ));
+        }
+    }
+
     fn tell(&self, event: Event) {
         let _ = self.events.send(event);
         (self.wake)();
@@ -235,14 +261,18 @@ fn drop_outgoing(shared: &Shared, state: &mut State, peer: PeerId) {
     {
         broadcast.targets.lock().unwrap().remove(&peer);
     }
-    shared.stats.lock().unwrap().viewers.remove(&peer);
+    let mut stats = shared.stats.lock().unwrap();
+    stats.viewers.remove(&peer);
+    stats.links.remove(&(peer, true));
 }
 
 fn drop_incoming(shared: &Shared, state: &mut State, peer: PeerId) {
     state.incoming.remove(&peer);
     shared.audio.lock().unwrap().remove(&peer);
     shared.latest.lock().unwrap().remove(&peer);
-    shared.stats.lock().unwrap().receiving.remove(&peer);
+    let mut stats = shared.stats.lock().unwrap();
+    stats.receiving.remove(&peer);
+    stats.links.remove(&(peer, false));
 }
 
 /// Sends the broadcast to one viewer: offer, wait for the answer, then write
@@ -263,14 +293,30 @@ fn start_outgoing(shared: &Arc<Shared>, state: &mut State, peer: PeerId) {
     let targets = Arc::clone(&broadcast.targets);
     let shared = Arc::clone(shared);
     tokio::spawn(async move {
-        let Ok(mut link) = SendLink::new(&shared.link).await else {
-            return;
+        shared.note(peer, true, |s| s.stage = "criando a conexão".to_owned());
+        let mut link = match SendLink::new(&shared.link).await {
+            Ok(link) => link,
+            Err(error) => {
+                shared.note(peer, true, |s| {
+                    s.stage = "falhou".to_owned();
+                    s.error = Some(error.to_string());
+                });
+                return;
+            }
         };
         tokio::select! {
             _ = &mut stop => {}
             // One viewer failing must not stop the others, so the error ends
             // only this task.
-            _ = drive_outgoing(&shared, peer, &mut link, Feeds { answers, frames, sound }, &need_key, &targets) => {}
+            result = drive_outgoing(&shared, peer, &mut link, Feeds { answers, frames, sound }, &need_key, &targets) => {
+                shared.note(peer, true, |s| match result {
+                    Ok(()) => s.stage = "encerrada".to_owned(),
+                    Err(error) => {
+                        s.stage = "falhou".to_owned();
+                        s.error = Some(format!("{error:#}"));
+                    }
+                });
+            }
         }
         targets.lock().unwrap().remove(&peer);
         link.close().await;
@@ -305,17 +351,32 @@ async fn drive_outgoing(
         mut frames,
         mut sound,
     } = feeds;
+    shared.note(peer, true, |s| {
+        s.stage = "reunindo endereços (ICE)".to_owned()
+    });
     let offer = link.create_offer().await?;
+    let local = crate::link::candidate_summary(&offer);
+    shared.note(peer, true, |s| {
+        s.stage = "oferta enviada, esperando a resposta".to_owned();
+        s.local = local;
+    });
     shared.tell(Event::Signal {
         to: peer,
         kind: SignalKind::Offer,
         payload: offer,
     });
     let answer = tokio::time::timeout(Duration::from_secs(30), answers.recv())
-        .await?
+        .await
+        .map_err(|_| anyhow::anyhow!("the answer did not arrive in 30 s"))?
         .ok_or_else(|| anyhow::anyhow!("no answer"))?;
+    let remote = crate::link::candidate_summary(&answer);
+    shared.note(peer, true, |s| {
+        s.stage = "conectando".to_owned();
+        s.remote = remote;
+    });
     link.accept_answer(answer).await?;
     link.wait_connected().await?;
+    shared.note(peer, true, |s| s.stage = "conectada".to_owned());
     targets
         .lock()
         .unwrap()
@@ -431,21 +492,51 @@ fn start_incoming(shared: &Arc<Shared>, state: &mut State, peer: PeerId, offer: 
                 publisher.tell(Event::Receiving(peer));
             }
         });
-        let Ok(mut link) = RecvLink::new(&shared.link, peer, Arc::clone(&shared.stats), feed).await
-        else {
-            return;
-        };
+        shared.note(peer, false, |s| s.stage = "criando a conexão".to_owned());
+        let mut link =
+            match RecvLink::new(&shared.link, peer, Arc::clone(&shared.stats), feed).await {
+                Ok(link) => link,
+                Err(error) => {
+                    shared.note(peer, false, |s| {
+                        s.stage = "falhou".to_owned();
+                        s.error = Some(error.to_string());
+                    });
+                    return;
+                }
+            };
+        let mut connection = link.watch_state();
+        let remote = crate::link::candidate_summary(&offer);
+        shared.note(peer, false, |s| {
+            s.stage = "respondendo".to_owned();
+            s.remote = remote;
+        });
         tokio::select! {
             _ = &mut stop => {}
             // Once answered, the connection delivers on its own until stopped.
             () = async {
-                if let Ok(answer) = link.accept_offer(offer).await {
-                    shared.tell(Event::Signal {
-                        to: peer,
-                        kind: SignalKind::Answer,
-                        payload: answer,
-                    });
-                    std::future::pending::<()>().await;
+                match link.accept_offer(offer).await {
+                    Ok(answer) => {
+                        let local = crate::link::candidate_summary(&answer);
+                        shared.note(peer, false, |s| {
+                            s.stage = "resposta enviada, conectando".to_owned();
+                            s.local = local;
+                        });
+                        shared.tell(Event::Signal {
+                            to: peer,
+                            kind: SignalKind::Answer,
+                            payload: answer,
+                        });
+                        // Follow the connection: a failure here is otherwise silent.
+                        while connection.changed().await.is_ok() {
+                            let state = format!("{:?}", *connection.borrow_and_update());
+                            shared.note(peer, false, |s| s.stage = format!("conexão: {state}"));
+                        }
+                        std::future::pending::<()>().await;
+                    }
+                    Err(error) => shared.note(peer, false, |s| {
+                        s.stage = "falhou".to_owned();
+                        s.error = Some(format!("{error:#}"));
+                    }),
                 }
             } => {}
         }
