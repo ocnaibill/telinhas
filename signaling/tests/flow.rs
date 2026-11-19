@@ -170,6 +170,34 @@ async fn create_then_join_by_code() {
 }
 
 #[tokio::test]
+async fn people_who_join_get_the_relays_the_server_has() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let hub = Hub::new(fast());
+    tokio::spawn(serve(listener, std::sync::Arc::clone(&hub)));
+
+    // Before the server has any relay the list is empty.
+    let a = create(addr, "Ana", 1, false).await;
+    let (_b, before) = join(addr, &a.code, "Beto", 2).await;
+    assert_eq!(before["ice_servers"], json!([]));
+
+    hub.set_ice_servers(vec![telinhas_signaling::protocol::IceServer {
+        urls: vec!["turn:relay.example:3478?transport=udp".into()],
+        username: "user".into(),
+        credential: "secret".into(),
+    }]);
+    let (_c, after) = join(addr, &a.code, "Caio", 3).await;
+    assert_eq!(
+        after["ice_servers"],
+        json!([{
+            "urls": ["turn:relay.example:3478?transport=udp"],
+            "username": "user",
+            "credential": "secret"
+        }])
+    );
+}
+
+#[tokio::test]
 async fn repeated_nicknames_get_a_suffix() {
     let addr = start(fast()).await;
     let a = create(addr, "Bianco", 1, false).await;

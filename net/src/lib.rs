@@ -72,6 +72,8 @@ pub struct RoomSnapshot {
     pub admin: PeerId,
     pub require_approval: bool,
     pub streams: Vec<StreamInfo>,
+    /// Relays for connections that cannot go direct.
+    pub ice_servers: Vec<telinhas_protocol::IceServer>,
 }
 
 /// What the client tells the interface.

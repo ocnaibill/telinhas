@@ -17,8 +17,8 @@ use uuid::Uuid;
 use crate::code::RoomCode;
 use crate::limiter::RateLimiter;
 use crate::protocol::{
-    ClientMessage, ConnectionState, ErrorCode, LatencySample, LeaveReason, PROTOCOL_VERSION,
-    PeerId, PeerInfo, ServerMessage, StreamInfo, StreamKind,
+    ClientMessage, ConnectionState, ErrorCode, IceServer, LatencySample, LeaveReason,
+    PROTOCOL_VERSION, PeerId, PeerInfo, ServerMessage, StreamInfo, StreamKind,
 };
 
 const MAX_NICKNAME_CHARS: usize = 24;
@@ -199,6 +199,8 @@ impl Room {
                     meta: s.meta.clone(),
                 })
                 .collect(),
+            // Filled in by the hub, which knows the relays.
+            ice_servers: Vec::new(),
         }
     }
 }
@@ -300,6 +302,8 @@ struct Inner {
     next_seq: u64,
     next_request: u64,
     timers: Vec<Timer>,
+    /// Relays handed to everyone who joins a room (see `relay.rs`).
+    ice_servers: Vec<IceServer>,
 }
 
 impl Inner {
@@ -315,6 +319,7 @@ impl Inner {
             next_seq: 0,
             next_request: 0,
             timers: Vec::new(),
+            ice_servers: Vec::new(),
         }
     }
 
@@ -553,8 +558,14 @@ impl Inner {
             );
         }
         let mut joined = room.joined_message(peer);
-        if let ServerMessage::RoomJoined { code: shown, .. } = &mut joined {
+        if let ServerMessage::RoomJoined {
+            code: shown,
+            ice_servers,
+            ..
+        } = &mut joined
+        {
             *shown = code.to_string();
+            ice_servers.clone_from(&self.ice_servers);
         }
         send(&self.conns, conn, joined);
         if room.participants.len() > self.cfg.capacity_warning {
@@ -604,8 +615,14 @@ impl Inner {
             ),
         }
         let mut joined = room.joined_message(peer);
-        if let ServerMessage::RoomJoined { code: shown, .. } = &mut joined {
+        if let ServerMessage::RoomJoined {
+            code: shown,
+            ice_servers,
+            ..
+        } = &mut joined
+        {
             *shown = code.to_string();
+            ice_servers.clone_from(&self.ice_servers);
         }
         send(&self.conns, conn, joined);
         if room.admin == Some(peer) {
@@ -1062,6 +1079,13 @@ impl Hub {
 
     pub fn config(&self) -> &Config {
         &self.cfg
+    }
+
+    /// Sets the relays that new joiners receive. Credentials expire, so the
+    /// server replaces them now and then.
+    pub fn set_ice_servers(&self, servers: Vec<IceServer>) {
+        let mut inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        inner.ice_servers = servers;
     }
 
     /// Registers a new, unbound connection.

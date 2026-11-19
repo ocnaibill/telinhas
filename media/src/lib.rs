@@ -44,6 +44,9 @@ pub enum Command {
         viewers: Vec<PeerId>,
     },
     StopBroadcast,
+    /// Relays the signaling server gave us, for connections that cannot go
+    /// direct. Used by the connections made from now on.
+    SetRelays(Vec<telinhas_protocol::IceServer>),
     /// Someone entered the room: they get the broadcast, if there is one.
     PeerJoined(PeerId),
     /// Someone left or dropped: forget its connections.
@@ -109,7 +112,7 @@ impl Media {
         let audio: AudioBuffers = Arc::default();
         let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(wake);
         let shared = actor::Shared {
-            link,
+            link: std::sync::Mutex::new(link),
             events: events_tx,
             latest: Arc::clone(&latest),
             stats: Arc::clone(&stats),

@@ -31,5 +31,18 @@ async fn main() -> std::io::Result<()> {
         Some(dir) => println!("site served at / from {}", dir.display()),
         None => println!("site: off (set TELINHAS_SITE_DIR to serve /)"),
     }
-    serve_with_files(listener, Hub::new(config), downloads, site).await
+    let hub = Hub::new(config);
+    // A relay for the people whose network blocks direct connections: the key
+    // is read from the environment and never printed.
+    match (
+        std::env::var("TELINHAS_TURN_KEY_ID"),
+        std::env::var("TELINHAS_TURN_TOKEN"),
+    ) {
+        (Ok(key_id), Ok(token)) if !key_id.is_empty() && !token.is_empty() => {
+            println!("relay: on (credentials from Cloudflare)");
+            telinhas_signaling::relay::keep_fresh(hub.clone(), key_id, token);
+        }
+        _ => println!("relay: off (set TELINHAS_TURN_KEY_ID and TELINHAS_TURN_TOKEN)"),
+    }
+    serve_with_files(listener, hub, downloads, site).await
 }

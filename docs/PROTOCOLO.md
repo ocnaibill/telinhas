@@ -76,7 +76,7 @@ Participante que cai fica **reconectando** por 60 s; se não voltar, é removido
 
 | `type` | Campos | Quando |
 |--------|--------|--------|
-| `room_joined` | `code`, `you` (`peer_id`, apelido final), `peers`, `admin`, `require_approval`, `streams` | Entrada ou reconexão concluída. |
+| `room_joined` | `code`, `you` (`peer_id`, apelido final), `peers`, `admin`, `require_approval`, `streams`, `ice_servers` | Entrada ou reconexão concluída. `ice_servers` traz os relays (TURN) com credenciais temporárias, para quem não consegue conexão direta; vem vazio se o servidor não tem relay, e servidores antigos o omitem. |
 | `approval_pending` | — | Para quem entra: aguardando o administrador. |
 | `approval_request` | `request_id`, `nickname` | Para o administrador (RF-19). |
 | `peer_joined` | `peer` (`peer_id`, `nickname`, `state`) | Alguém entrou. |
@@ -138,3 +138,13 @@ Servidor em `signaling/` (DEC-54): `tokio` e `axum`, JSON com `serde`. Endpoints
 - Criação de salas por IP: limite numérico depende de uso real.
 - Detalhe do `meta` de `stream_state` (campos exatos de resolução/fps/codec) depende da biblioteca WebRTC escolhida (DEC-38).
 - Formato do `payload` de `signal` segue o que o `webrtc-rs` expõe.
+
+## Relay (TURN)
+
+Quem está atrás de um NAT simétrico ou de CGNAT não consegue conexão direta com os outros (o painel de diagnóstico mostra "NAT: SIMÉTRICO"). Para esses casos o servidor entrega, dentro de `room_joined`, os `ice_servers`: `urls`, `username` e `credential` do TURN da Cloudflare. O app só usa o relay quando o caminho direto falha. Não há dados de mídia no servidor de sinalização: o relay é da Cloudflare.
+
+- O servidor liga o relay quando as variáveis `TELINHAS_TURN_KEY_ID` e `TELINHAS_TURN_TOKEN` existem no ambiente (a chave nunca entra no repositório nem é impressa). Sem elas, `ice_servers` vai vazio.
+- As credenciais valem 24 horas e são renovadas a cada 4. Entram só os endereços UDP da porta 3478: a 443 por UDP não respondeu nos testes e travava a coleta de endereços.
+- `TELINHAS_FORCE_RELAY=1` no app força passar só pelo relay, para testar.
+- Teste real, que precisa da chave no ambiente: `cargo test -p telinhas-media --test relay -- --ignored --nocapture`.
+

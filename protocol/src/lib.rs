@@ -126,6 +126,15 @@ pub struct StreamInfo {
     pub meta: Value,
 }
 
+/// A relay (TURN) the clients may use when a direct connection is impossible,
+/// with credentials that expire. The server hands them out in `room_joined`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IceServer {
+    pub urls: Vec<String>,
+    pub username: String,
+    pub credential: String,
+}
+
 /// Messages sent by the server.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -137,6 +146,9 @@ pub enum ServerMessage {
         admin: PeerId,
         require_approval: bool,
         streams: Vec<StreamInfo>,
+        /// Relays for connections that cannot go direct. Missing from older servers.
+        #[serde(default)]
+        ice_servers: Vec<IceServer>,
     },
     ApprovalPending,
     ApprovalRequest {
@@ -392,6 +404,11 @@ mod tests {
                     kind: StreamKind::Webcam,
                     meta: json!(null),
                 }],
+                ice_servers: vec![IceServer {
+                    urls: vec!["turn:relay.example:3478?transport=udp".into()],
+                    username: "u".into(),
+                    credential: "c".into(),
+                }],
             },
             ServerMessage::ApprovalPending,
             ServerMessage::ApprovalRequest {
@@ -471,5 +488,14 @@ mod tests {
         let value: Value = serde_json::from_str(&text).unwrap();
         assert_eq!(value["code"], "invalid_code");
         assert!(value.get("retry_after_s").is_none());
+    }
+
+    #[test]
+    fn a_room_joined_from_an_older_server_has_no_relays() {
+        let old = r#"{"v":1,"type":"room_joined","code":"X","you":{"peer_id":"00000000-0000-0000-0000-000000000001","nickname":"A","state":"connected"},"peers":[],"admin":"00000000-0000-0000-0000-000000000001","require_approval":false,"streams":[]}"#;
+        match decode_server(old) {
+            Ok(ServerMessage::RoomJoined { ice_servers, .. }) => assert!(ice_servers.is_empty()),
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 }

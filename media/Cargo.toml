@@ -28,3 +28,7 @@ telinhas-codec = { path = "../codec" }
 telinhas-protocol = { path = "../protocol" }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 webrtc = "0.21.1"
+
+[dev-dependencies]
+# Only for the relay test, which asks Cloudflare for credentials.
+telinhas-signaling = { path = "../signaling" }

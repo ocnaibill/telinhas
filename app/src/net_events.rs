@@ -277,6 +277,12 @@ impl TelinhasApp {
     }
 
     fn on_joined(&mut self, snapshot: RoomSnapshot) {
+        // The relays come with the room: connections made from now on can use them.
+        if let Some(media) = &self.media {
+            media.send(telinhas_media::Command::SetRelays(
+                snapshot.ice_servers.clone(),
+            ));
+        }
         self.link = Link::Idle;
         self.notice = None;
         if self.screen == Screen::Room && self.room.is_some() {

@@ -16,6 +16,7 @@ use rtc::media::Sample;
 use rtc::media::io::sample_builder::SampleBuilder;
 use rtc::media_stream::MediaStreamTrack;
 use rtc::peer_connection::configuration::RTCConfigurationBuilder;
+use rtc::peer_connection::configuration::RTCIceTransportPolicy;
 use rtc::peer_connection::configuration::interceptor_registry::{
     CongestionFeedback, configure_congestion_control, register_default_interceptors,
 };
@@ -66,8 +67,14 @@ pub struct LinkConfig {
     pub udp_addr: String,
     /// STUN URLs, such as `stun:stun.l.google.com:19302`.
     pub stun: Vec<String>,
-    /// Optional TURN relay as `(url, username, credential)`.
-    pub turn: Option<(String, String, String)>,
+    /// Relays (TURN) from the signaling server, for when the two networks
+    /// cannot reach each other directly. They are only used then: a direct
+    /// path is preferred when there is one.
+    pub relays: Vec<telinhas_protocol::IceServer>,
+    /// Use only the relay, never a direct path. For testing the relay, and for
+    /// a network where direct connections are known not to work
+    /// (`TELINHAS_FORCE_RELAY=1`).
+    pub force_relay: bool,
 }
 
 impl LinkConfig {
@@ -75,7 +82,8 @@ impl LinkConfig {
         Self {
             udp_addr: "127.0.0.1:0".into(),
             stun: Vec::new(),
-            turn: None,
+            relays: Vec::new(),
+            force_relay: false,
         }
     }
 
@@ -84,7 +92,8 @@ impl LinkConfig {
         Self {
             udp_addr: format!("{}:0", rtc_signal::get_local_ip()),
             stun: vec!["stun:stun.l.google.com:19302".into()],
-            turn: None,
+            relays: Vec::new(),
+            force_relay: std::env::var_os("TELINHAS_FORCE_RELAY").is_some_and(|v| v == "1"),
         }
     }
 }
@@ -367,15 +376,18 @@ async fn build(
             ..Default::default()
         });
     }
-    if let Some((url, username, credential)) = &link.turn {
+    for relay in &link.relays {
         servers.push(RTCIceServer {
-            urls: vec![url.clone()],
-            username: username.clone(),
-            credential: credential.clone(),
+            urls: relay.urls.clone(),
+            username: relay.username.clone(),
+            credential: relay.credential.clone(),
         });
     }
     if !servers.is_empty() {
         config = config.with_ice_servers(servers);
+    }
+    if link.force_relay {
+        config = config.with_ice_transport_policy(RTCIceTransportPolicy::Relay);
     }
 
     let (gathered_tx, gathered) = watch::channel(false);
@@ -402,10 +414,18 @@ async fn build(
     })
 }
 
+/// Waits for the gathering of addresses. A server that does not answer (a relay
+/// on a blocked port, say) must not sink the connection: after ten seconds
+/// the addresses found so far are used.
 async fn wait_gathered(gathered: &mut watch::Receiver<bool>) -> Result<()> {
-    tokio::time::timeout(Duration::from_secs(10), gathered.wait_for(|done| *done))
-        .await
-        .context("ICE gathering did not finish in 10 s")??;
+    match tokio::time::timeout(Duration::from_secs(10), gathered.wait_for(|done| *done)).await {
+        Ok(result) => {
+            result?;
+        }
+        Err(_) => {
+            crate::log::line("ICE gathering did not finish in 10 s: going on with what was found")
+        }
+    }
     Ok(())
 }
 

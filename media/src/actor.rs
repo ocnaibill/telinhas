@@ -24,7 +24,8 @@ const LOST_AFTER: Duration = Duration::from_secs(2);
 const MIN_IN_FLIGHT: usize = 8;
 
 pub(crate) struct Shared {
-    pub link: LinkConfig,
+    /// The link settings. The relays arrive after joining a room, so this changes.
+    pub link: std::sync::Mutex<LinkConfig>,
     pub events: EventSender,
     pub latest: Latest,
     pub stats: Arc<Mutex<Stats>>,
@@ -57,6 +58,10 @@ impl Shared {
                     .map_or(String::new(), |e| format!(" | erro: {e}"))
             ));
         }
+    }
+
+    fn link(&self) -> LinkConfig {
+        self.link.lock().unwrap().clone()
     }
 
     fn tell(&self, event: Event) {
@@ -106,6 +111,10 @@ pub(crate) async fn run(shared: Shared, mut inbox: UnboundedReceiver<Command>) {
                 } else {
                     start_broadcast(&shared, &mut state, spec, viewers);
                 }
+            }
+            Command::SetRelays(relays) => {
+                crate::log::line(&format!("relays: {} server entries", relays.len()));
+                shared.link.lock().unwrap().relays = relays;
             }
             Command::StopBroadcast => stop_broadcast(&shared, &mut state),
             Command::PeerJoined(peer) => {
@@ -294,7 +303,7 @@ fn start_outgoing(shared: &Arc<Shared>, state: &mut State, peer: PeerId) {
     let shared = Arc::clone(shared);
     tokio::spawn(async move {
         shared.note(peer, true, |s| s.stage = "criando a conexão".to_owned());
-        let mut link = match SendLink::new(&shared.link).await {
+        let mut link = match SendLink::new(&shared.link()).await {
             Ok(link) => link,
             Err(error) => {
                 shared.note(peer, true, |s| {
@@ -494,7 +503,7 @@ fn start_incoming(shared: &Arc<Shared>, state: &mut State, peer: PeerId, offer: 
         });
         shared.note(peer, false, |s| s.stage = "criando a conexão".to_owned());
         let mut link =
-            match RecvLink::new(&shared.link, peer, Arc::clone(&shared.stats), feed).await {
+            match RecvLink::new(&shared.link(), peer, Arc::clone(&shared.stats), feed).await {
                 Ok(link) => link,
                 Err(error) => {
                     shared.note(peer, false, |s| {

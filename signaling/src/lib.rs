@@ -7,6 +7,7 @@
 pub mod code;
 pub mod hub;
 pub mod limiter;
+pub mod relay;
 pub mod server;
 
 pub use hub::{Config, Hub, parse_ip_list};

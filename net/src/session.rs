@@ -313,7 +313,7 @@ async fn connection_loop(
                     }
                 };
                 match message {
-                    ServerMessage::RoomJoined { code: room_code, you, peers, admin, require_approval, streams } => {
+                    ServerMessage::RoomJoined { code: room_code, you, peers, admin, require_approval, streams, ice_servers } => {
                         *code = Some(room_code.clone());
                         on_joined();
                         emit.emit(Event::Joined(RoomSnapshot {
@@ -323,6 +323,7 @@ async fn connection_loop(
                             admin,
                             require_approval,
                             streams,
+                            ice_servers,
                         }));
                     }
                     ServerMessage::Error { code: error_code, message, retry_after_s } => {
